@@ -1,0 +1,7 @@
+[package]
+name = "tracebuild"
+version = "0.1.0"
+authors = ["Jan Kühle <jan.kuehle@codecentric.de>"]
+edition = "2018"
+
+[dependencies]
