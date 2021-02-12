@@ -14,29 +14,31 @@ curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/dow
 chmod +x tracebuild
 ```
 
-Generate IDs
+Generate IDs and start times
 
 ```
 BUILD_ID=$(tracebuild id)
-SPAN_ID=$(tracebuild id)
+STEP_ID=$(tracebuild id)
+BUILD_START=$(tracebuild now)
+STEP_START=$(tracebuild now)
 ```
 
 Wrap each command in:
 
 ```
-tracebuild cmd --build $BUILD_ID --step $PARENT_SPAN_ID -- my-cmd --with params
+tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] -- my-cmd --with params
 ```
 
 After each step:
 
 ```
-tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $SPAN_ID --name $STEP_NAME
+tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID [--name $STEP_NAME]
 ```
 
 After the entire build:
 
 ```
-tracebuild build --id $BUILD_ID --rev $BRANCH --commit --$COMMIT --status $STATUS
+tracebuild build --id $BUILD_ID --branch $BRANCH --commit --$COMMIT --status $STATUS [--name $BUILD_NAME]
 ```
 
 ## Configuration

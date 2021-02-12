@@ -5,3 +5,11 @@ authors = ["Jan Kühle <jan.kuehle@codecentric.de>"]
 edition = "2018"
 
 [dependencies]
+nix = "0.19.1"
+opentelemetry = { version = "0.12.0", features = ["tokio-support"] }
+opentelemetry-otlp = "0.5.0"
+opentelemetry-semantic-conventions = "0.4.0"
+rand = "0.8.3"
+structopt = "0.3.21"
+thiserror = "1.0.23"
+tokio = { version = "1.2.0", features = ["macros", "rt", "process"] }
