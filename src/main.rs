@@ -147,7 +147,6 @@ async fn main() {
                 Ok(exit_status) => exit_status.code().unwrap_or(1),
                 Err(err) => match err {
                     cmd::ForkError::FailedToFork {
-                        cmd: _,
                         err,
                         suggested_exit_code,
                     } => {
@@ -156,6 +155,7 @@ async fn main() {
                         span.set_status(StatusCode::Error, err.to_string());
                         suggested_exit_code
                     }
+                    #[cfg(unix)]
                     cmd::ForkError::FailedToRegisterSignalHandler {
                         err,
                         suggested_exit_code,
@@ -170,6 +170,11 @@ async fn main() {
                         span.record_exception(&err);
                         span.set_status(StatusCode::Error, err.to_string());
                         err.raw_os_error().unwrap_or(1)
+                    }
+                    cmd::ForkError::Killed => {
+                        eprintln!("Child was killed");
+                        span.set_status(StatusCode::Error, "".into());
+                        1
                     }
                 },
             };
