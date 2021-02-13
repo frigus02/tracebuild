@@ -127,8 +127,9 @@ async fn main() {
             args,
         } => {
             let (tracer, uninstall) = trace::install_pipeline();
+            let span_name = format!("cmd - {} {}", cmd, args.join(" "));
             let span = tracer
-                .span_builder("cmd")
+                .span_builder(&span_name)
                 .with_parent_context(trace::get_parent_context(build, step))
                 .with_kind(SpanKind::Client)
                 .with_attributes(vec![
