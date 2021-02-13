@@ -45,4 +45,13 @@ tracebuild build --id $BUILD_ID --branch $BRANCH --commit --$COMMIT --status $ST
 
 Configure the exporter using environment variables.
 
-https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md
+| Variable                           | Description                                                                                                                   | Default                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| OTEL_TRACES_EXPORTER               | OpenTelemetry trace exporter to use. Supported are: otlp, jaeger                                                              | otlp                   |
+| OTEL_EXPORTER_OTLP_ENDPOINT        |                                                                                                                               | https://localhost:4317 |
+| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT |                                                                                                                               | https://localhost:4317 |
+| OTEL_EXPORTER_JAEGER_AGENT_HOST    |                                                                                                                               | 127.0.0.1              |
+| OTEL_EXPORTER_JAEGER_AGENT_PORT    |                                                                                                                               | 6831                   |
+| OTEL_EXPORTER_JAEGER_ENDPOINT      | Jaeger collector endpoint. If specified, this is used instead of the Jaeger agent. Example: http://localhost:14268/api/traces |                        |
+| OTEL_EXPORTER_JAEGER_USER          | Jaeger collector user for basic auth.                                                                                         |                        |
+| OTEL_EXPORTER_JAEGER_PASSWORD      | Jaeger collector password for basic auth.                                                                                     |                        |

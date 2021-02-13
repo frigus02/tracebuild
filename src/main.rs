@@ -198,8 +198,8 @@ async fn main() {
             status,
         } => {
             let (tracer, _uninstall) = pipeline::install_pipeline();
-            let span_name = if let Some(name) = name {
-                format!("step - {}", name)
+            let span_name: Cow<'static, str> = if let Some(name) = name {
+                format!("step - {}", name).into()
             } else {
                 "step".into()
             };
@@ -229,8 +229,8 @@ async fn main() {
             status,
         } => {
             let (tracer, _uninstall) = pipeline::install_pipeline();
-            let span_name = if let Some(name) = name {
-                format!("build - {}", name)
+            let span_name: Cow<'static, str> = if let Some(name) = name {
+                format!("build - {}", name).into()
             } else {
                 "build".into()
             };

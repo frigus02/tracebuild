@@ -7,6 +7,12 @@ receivers:
   otlp:
     protocols:
       grpc:
+  jaeger:
+    protocols:
+      grpc:
+      thrift_binary:
+      thrift_compact:
+      thrift_http:
 
 exporters:
   logging:
@@ -15,6 +21,6 @@ exporters:
 service:
   pipelines:
     traces:
-      receivers: [otlp]
+      receivers: [otlp, jaeger]
       exporters: [logging]
   extensions: [health_check, zpages]
