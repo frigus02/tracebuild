@@ -52,13 +52,11 @@ fn try_install_otlp_pipeline() -> Result<(Tracer, Uninstall), TraceError> {
         .with_protocol(opentelemetry_otlp::Protocol::Grpc)
         .with_timeout(Duration::from_secs(5))
         .install()?;
-    println!("USING OTLP");
     Ok((tracer, Uninstall::Otlp(uninstall)))
 }
 
 fn try_install_jaeger_pipeline() -> Result<(Tracer, Uninstall), TraceError> {
     let (tracer, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
-    println!("USING JAEGER");
     Ok((tracer, Uninstall::Jaeger(uninstall)))
 }
 
