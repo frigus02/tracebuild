@@ -17,6 +17,7 @@ pub enum ForkError {
     },
     #[error("Child program failed: {0}")]
     IoError(#[from] io::Error),
+    #[cfg(not(unix))]
     #[error("Child was killed")]
     Killed,
 }
@@ -44,7 +45,7 @@ impl TermSignal {
     }
 
     async fn recv(&mut self) {
-        self.signal.recv().await
+        self.signal.recv().await;
     }
 }
 
@@ -63,7 +64,7 @@ impl TermSignal {
 }
 
 #[cfg(unix)]
-async fn terminate_child(child: Child) -> Result<ExitStatus, ForkError> {
+async fn terminate_child(mut child: Child) -> Result<ExitStatus, ForkError> {
     use nix::{
         sys::signal::{kill, Signal::SIGTERM},
         unistd::Pid,

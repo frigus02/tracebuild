@@ -175,6 +175,7 @@ async fn main() {
                         span.set_status(StatusCode::Error, err.to_string());
                         err.raw_os_error().unwrap_or(1)
                     }
+                    #[cfg(not(unix))]
                     cmd::ForkError::Killed => {
                         eprintln!("Child was killed");
                         span.set_status(StatusCode::Error, "".into());
