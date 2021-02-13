@@ -1,6 +1,7 @@
 mod cmd;
+mod context;
 mod id;
-mod trace;
+mod pipeline;
 
 use opentelemetry::{
     trace::{FutureExt, Span, SpanId, SpanKind, StatusCode, TraceContextExt, TraceId, Tracer},
@@ -126,11 +127,11 @@ async fn main() {
             cmd,
             args,
         } => {
-            let (tracer, uninstall) = trace::install_pipeline();
+            let (tracer, uninstall) = pipeline::install_pipeline();
             let span_name = format!("cmd - {} {}", cmd, args.join(" "));
             let span = tracer
                 .span_builder(&span_name)
-                .with_parent_context(trace::get_parent_context(build, step))
+                .with_parent_context(context::get_parent_context(build, step))
                 .with_kind(SpanKind::Client)
                 .with_attributes(vec![
                     Key::new("tracebuild.cmd.command").string(cmd.clone()),
@@ -196,7 +197,7 @@ async fn main() {
             name,
             status,
         } => {
-            let (tracer, _uninstall) = trace::install_pipeline();
+            let (tracer, _uninstall) = pipeline::install_pipeline();
             let span_name = if let Some(name) = name {
                 format!("step - {}", name)
             } else {
@@ -204,7 +205,7 @@ async fn main() {
             };
             let span = tracer
                 .span_builder(&span_name)
-                .with_parent_context(trace::get_parent_context(build, step))
+                .with_parent_context(context::get_parent_context(build, step))
                 .with_start_time(start_time)
                 .with_span_id(id)
                 .with_kind(SpanKind::Internal)
@@ -227,7 +228,7 @@ async fn main() {
             commit,
             status,
         } => {
-            let (tracer, _uninstall) = trace::install_pipeline();
+            let (tracer, _uninstall) = pipeline::install_pipeline();
             let span_name = if let Some(name) = name {
                 format!("build - {}", name)
             } else {
