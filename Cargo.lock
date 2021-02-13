@@ -535,15 +535,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry-semantic-conventions"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ecb679b997c41108a498e3ce8b933fe2f643a9a722ad8ca33f95edab84df106"
-dependencies = [
- "opentelemetry",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1092,7 +1083,6 @@ dependencies = [
  "nix",
  "opentelemetry",
  "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
  "rand",
  "structopt",
  "thiserror",

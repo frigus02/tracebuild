@@ -106,7 +106,7 @@ enum Args {
     },
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() {
     let args = Args::from_args();
     match args {
@@ -144,7 +144,11 @@ async fn main() {
                 .with_context(Context::current_with_span(span.clone()))
                 .await
             {
-                Ok(exit_status) => exit_status.code().unwrap_or(1),
+                Ok(exit_status) => {
+                    let exit_code = exit_status.code().unwrap_or(1);
+                    span.set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
+                    exit_code
+                }
                 Err(err) => match err {
                     cmd::ForkError::FailedToFork {
                         err,
@@ -178,7 +182,6 @@ async fn main() {
                     }
                 },
             };
-            span.set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
             drop(span);
             drop(uninstall);
             std::process::exit(exit_code);
@@ -191,7 +194,7 @@ async fn main() {
             name,
             status,
         } => {
-            let (tracer, uninstall) = trace::install_pipeline();
+            let (tracer, _uninstall) = trace::install_pipeline();
             let span_name = if let Some(name) = name {
                 format!("step - {}", name)
             } else {
@@ -213,8 +216,6 @@ async fn main() {
                     "".into(),
                 );
             }
-            drop(span);
-            drop(uninstall);
         }
         Args::Build {
             id,
@@ -224,7 +225,7 @@ async fn main() {
             commit,
             status,
         } => {
-            let (tracer, uninstall) = trace::install_pipeline();
+            let (tracer, _uninstall) = trace::install_pipeline();
             let span_name = if let Some(name) = name {
                 format!("build - {}", name)
             } else {
@@ -252,8 +253,6 @@ async fn main() {
                     "".into(),
                 );
             }
-            drop(span);
-            drop(uninstall);
         }
     }
 }
