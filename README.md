@@ -32,13 +32,13 @@ tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] -- my-cmd --with param
 After each step:
 
 ```
-tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID [--name $STEP_NAME]
+tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID --start-time $STEP_START [--name $STEP_NAME] [--status <success|failure>]
 ```
 
 After the entire build:
 
 ```
-tracebuild build --id $BUILD_ID --branch $BRANCH --commit --$COMMIT --status $STATUS [--name $BUILD_NAME]
+tracebuild build --id $BUILD_ID --start-time $BUILD_START [--name $BUILD_NAME] [--branch $BRANCH] [--commit --$COMMIT] [--status <success|failure>]
 ```
 
 ## Configuration

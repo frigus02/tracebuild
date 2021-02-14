@@ -49,13 +49,17 @@ impl FromStr for Status {
 
 #[derive(StructOpt)]
 enum Args {
+    /// Generates an ID, which can be used as either a span or build id.
     ID,
+    /// Generates timestamp, which can be used as a build or span start time.
     Now,
+    /// Executes the specified command and reports a span using the configured OpenTelemetry
+    /// exporter.
     Cmd {
         /// Build ID
         #[structopt(long = "build", parse(try_from_str = parse_build_id))]
         build: (TraceId, SpanId),
-        /// Parent step ID
+        /// Optional parent step ID
         #[structopt(long = "step", parse(try_from_str = parse_step_id))]
         step: Option<SpanId>,
         /// Command name
@@ -65,11 +69,13 @@ enum Args {
         #[structopt(name = "ARGS")]
         args: Vec<String>,
     },
+    /// Reports a span using the configured OpenTelemetry exporter with references to the given
+    /// build and optional parent step.
     Step {
         /// Build ID
         #[structopt(long = "build", parse(try_from_str = parse_build_id))]
         build: (TraceId, SpanId),
-        /// Parent step ID
+        /// Optional parent step ID
         #[structopt(long = "step", parse(try_from_str = parse_step_id))]
         step: Option<SpanId>,
         /// Step ID
@@ -78,13 +84,14 @@ enum Args {
         /// Start time
         #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
         start_time: SystemTime,
-        /// Name
+        /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
-        /// Status
+        /// Optional status
         #[structopt(long = "status")]
         status: Option<Status>,
     },
+    /// Reports a span using the configured OpenTelemetry exporter with the given ID and metadata.
     Build {
         /// Build ID
         #[structopt(long = "id", parse(try_from_str = parse_build_id))]
@@ -92,16 +99,16 @@ enum Args {
         /// Start time
         #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
         start_time: SystemTime,
-        /// Name
+        /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
-        /// Branch name
+        /// Optional branch name
         #[structopt(long = "branch")]
         branch: Option<String>,
-        /// Commit SHA
+        /// Optioanl commit SHA
         #[structopt(long = "commit")]
         commit: Option<String>,
-        /// Status
+        /// Optional status
         #[structopt(long = "status")]
         status: Option<Status>,
     },
