@@ -5,16 +5,10 @@ use tokio::process::{Child, Command};
 #[derive(Debug, Error)]
 pub enum ForkError {
     #[error("Failed to fork child program: {err}")]
-    FailedToFork {
-        err: io::Error,
-        suggested_exit_code: i32,
-    },
+    FailedToFork(io::Error),
     #[cfg(unix)]
     #[error("Failed to register SIGTERM handler: {err}")]
-    FailedToRegisterSignalHandler {
-        err: io::Error,
-        suggested_exit_code: i32,
-    },
+    FailedToRegisterSignalHandler(io::Error),
     #[error("Child program failed: {0}")]
     IoError(#[from] io::Error),
     #[cfg(not(unix))]
@@ -24,6 +18,18 @@ pub enum ForkError {
 
 // From https://man.netbsd.org/sysexits.3
 const EX_OSERR: i32 = 71;
+
+impl ForkError {
+    pub fn suggested_exit_code(&self) -> i32 {
+        match self {
+            ForkError::FailedToFork(_) => EX_OSERR,
+            #[cfg(unix)]
+            ForkError::FailedToRegisterSignalHandler(_) => EX_OSERR,
+            ForkError::IoError(err) => err.raw_os_error().unwrap_or(1),
+            ForkError::Killed => 1,
+        }
+    }
+}
 
 struct TermSignal {
     #[cfg(unix)]
@@ -35,12 +41,8 @@ impl TermSignal {
     fn new() -> Result<Self, ForkError> {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let signal = signal(SignalKind::terminate()).map_err(|err| {
-            ForkError::FailedToRegisterSignalHandler {
-                err,
-                suggested_exit_code: EX_OSERR,
-            }
-        })?;
+        let signal =
+            signal(SignalKind::terminate()).map_err(ForkError::FailedToRegisterSignalHandler)?;
         Ok(Self { signal })
     }
 
@@ -88,15 +90,10 @@ async fn terminate_child(mut child: Child) -> Result<ExitStatus, ForkError> {
 }
 
 pub async fn fork_with_sigterm(cmd: String, args: Vec<String>) -> Result<ExitStatus, ForkError> {
-    let mut child = match Command::new(&cmd).args(args).spawn() {
-        Ok(child) => child,
-        Err(err) => {
-            return Err(ForkError::FailedToFork {
-                err,
-                suggested_exit_code: EX_OSERR,
-            })
-        }
-    };
+    let mut child = Command::new(&cmd)
+        .args(args)
+        .spawn()
+        .map_err(ForkError::FailedToFork)?;
 
     let mut sigterm = TermSignal::new()?;
 

@@ -158,39 +158,12 @@ async fn main() {
                     span.set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
                     exit_code
                 }
-                Err(err) => match err {
-                    cmd::ForkError::FailedToFork {
-                        err,
-                        suggested_exit_code,
-                    } => {
-                        eprintln!("{}", err);
-                        span.record_exception(&err);
-                        span.set_status(StatusCode::Error, err.to_string());
-                        suggested_exit_code
-                    }
-                    #[cfg(unix)]
-                    cmd::ForkError::FailedToRegisterSignalHandler {
-                        err,
-                        suggested_exit_code,
-                    } => {
-                        eprintln!("{}", err);
-                        span.record_exception(&err);
-                        span.set_status(StatusCode::Error, err.to_string());
-                        suggested_exit_code
-                    }
-                    cmd::ForkError::IoError(err) => {
-                        eprintln!("{}", err);
-                        span.record_exception(&err);
-                        span.set_status(StatusCode::Error, err.to_string());
-                        err.raw_os_error().unwrap_or(1)
-                    }
-                    #[cfg(not(unix))]
-                    cmd::ForkError::Killed => {
-                        eprintln!("Child was killed");
-                        span.set_status(StatusCode::Error, "".into());
-                        1
-                    }
-                },
+                Err(err) => {
+                    eprintln!("{}", err);
+                    span.record_exception(&err);
+                    span.set_status(StatusCode::Error, err.to_string());
+                    err.suggested_exit_code()
+                }
             };
             drop(span);
             drop(uninstall);
