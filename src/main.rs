@@ -1,3 +1,8 @@
+//! A small binary to instrument builds in systems like GitHub Actions, Travis CI, etc. It uses
+//! [OpenTelemetry](https://opentelemetry.io/) under the hood, which means you should be able to
+//! integrate it in your existing telemetry platform.
+#![deny(missing_docs, unreachable_pub, missing_debug_implementations)]
+
 mod cmd;
 mod context;
 mod id;

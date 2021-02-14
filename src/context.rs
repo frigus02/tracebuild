@@ -3,7 +3,7 @@ use opentelemetry::{
     Context,
 };
 
-pub fn get_parent_context(build: (TraceId, SpanId), step: Option<SpanId>) -> Context {
+pub(crate) fn get_parent_context(build: (TraceId, SpanId), step: Option<SpanId>) -> Context {
     let span_context = opentelemetry::trace::SpanContext::new(
         build.0,
         step.unwrap_or(build.1),

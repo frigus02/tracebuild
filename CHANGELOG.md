@@ -6,10 +6,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 
-## 0.1.0 - 2021-02-12
+## v0.1.0 - 2021-02-14
 
-### Added
+First release.
 
-- First release.
-
-[unreleased]: https://github.com/frigus02/opentelemetry-application-insights/compare/0.1.0...HEAD
+[unreleased]: https://github.com/frigus02/opentelemetry-application-insights/compare/v0.1.0...HEAD

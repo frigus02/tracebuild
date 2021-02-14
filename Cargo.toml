@@ -1,8 +1,20 @@
 [package]
 name = "tracebuild"
 version = "0.1.0"
-authors = ["Jan Kühle <jan.kuehle@codecentric.de>"]
+authors = ["Jan Kühle <jkuehle90@gmail.com>"]
 edition = "2018"
+description = "Command line utility to instrument builds and send traces to OpenTelemetry supported tracing systems"
+readme = "README.md"
+repository = "https://github.com/frigus02/tracebuild"
+license = "MIT"
+keywords = ["opentelemetry", "tracing", "builds"]
+categories = [
+    "command-line-utilities",
+    "development-tools::build-utils",
+]
+exclude = [
+    ".github/*",
+]
 
 [dependencies]
 nix = "0.19.1"

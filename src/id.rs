@@ -3,24 +3,24 @@ use rand::prelude::*;
 use std::fmt::Display;
 use std::str::FromStr;
 
-pub struct ID {
+pub(crate) struct ID {
     trace: u128,
     span: u64,
 }
 
 impl ID {
-    pub fn generate() -> Self {
+    pub(crate) fn generate() -> Self {
         Self {
             trace: rand::thread_rng().gen(),
             span: rand::thread_rng().gen(),
         }
     }
 
-    pub fn trace_id(&self) -> TraceId {
+    pub(crate) fn trace_id(&self) -> TraceId {
         TraceId::from_u128(self.trace)
     }
 
-    pub fn span_id(&self) -> SpanId {
+    pub(crate) fn span_id(&self) -> SpanId {
         SpanId::from_u64(self.span)
     }
 }

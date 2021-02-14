@@ -2,13 +2,13 @@ use opentelemetry::{sdk::trace::Tracer, trace::TraceError};
 use std::borrow::Cow;
 use std::time::Duration;
 
-pub enum Uninstall {
+pub(crate) enum Uninstall {
     Otlp(opentelemetry_otlp::Uninstall),
     Jaeger(opentelemetry_jaeger::Uninstall),
     Stdout(opentelemetry::sdk::export::trace::stdout::Uninstall),
 }
 
-pub fn install_pipeline() -> (Tracer, Uninstall) {
+pub(crate) fn install_pipeline() -> (Tracer, Uninstall) {
     if let Err(err) = opentelemetry::global::set_error_handler(|err| {
         eprintln!("OpenTelemetry Error: {}", err);
     }) {

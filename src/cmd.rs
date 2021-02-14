@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio::process::{Child, Command};
 
 #[derive(Debug, Error)]
-pub enum ForkError {
+pub(crate) enum ForkError {
     #[error("Failed to fork child program: {0}")]
     FailedToFork(io::Error),
     #[cfg(unix)]
@@ -20,7 +20,7 @@ pub enum ForkError {
 const EX_OSERR: i32 = 71;
 
 impl ForkError {
-    pub fn suggested_exit_code(&self) -> i32 {
+    pub(crate) fn suggested_exit_code(&self) -> i32 {
         match self {
             ForkError::FailedToFork(_) => EX_OSERR,
             #[cfg(unix)]
@@ -90,7 +90,10 @@ async fn terminate_child(mut child: Child) -> Result<ExitStatus, ForkError> {
     Err(ForkError::Killed)
 }
 
-pub async fn fork_with_sigterm(cmd: String, args: Vec<String>) -> Result<ExitStatus, ForkError> {
+pub(crate) async fn fork_with_sigterm(
+    cmd: String,
+    args: Vec<String>,
+) -> Result<ExitStatus, ForkError> {
     let mut child = Command::new(&cmd)
         .args(args)
         .spawn()
