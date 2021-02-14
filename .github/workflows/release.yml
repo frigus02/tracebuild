@@ -1,0 +1,31 @@
+on:
+  push:
+    tags:
+      - "v*"
+
+name: Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - name: Prepare release assets
+        run: |
+          mkdir release-assets
+          mv target/release/tracebuild release-assets/tracebuild-linux-amd64
+      - uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: release-assets/*
