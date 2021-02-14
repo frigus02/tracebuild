@@ -4,10 +4,10 @@ use tokio::process::{Child, Command};
 
 #[derive(Debug, Error)]
 pub enum ForkError {
-    #[error("Failed to fork child program: {err}")]
+    #[error("Failed to fork child program: {0}")]
     FailedToFork(io::Error),
     #[cfg(unix)]
-    #[error("Failed to register SIGTERM handler: {err}")]
+    #[error("Failed to register SIGTERM handler: {0}")]
     FailedToRegisterSignalHandler(io::Error),
     #[error("Child program failed: {0}")]
     IoError(#[from] io::Error),
@@ -26,6 +26,7 @@ impl ForkError {
             #[cfg(unix)]
             ForkError::FailedToRegisterSignalHandler(_) => EX_OSERR,
             ForkError::IoError(err) => err.raw_os_error().unwrap_or(1),
+            #[cfg(not(unix))]
             ForkError::Killed => 1,
         }
     }
