@@ -5,8 +5,21 @@ on:
 name: Example AppInsights
 
 jobs:
-  build_and_test:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      buildid: ${{ steps.tracebuild.outputs.buildid }}
+      buildstart: ${{ steps.tracebuild.outputs.buildstart }}
+    steps:
+      - id: tracebuild
+        run: |
+          curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
+          chmod +x tracebuild
+          echo "::set-output name=buildid::$(./tracebuild id)"
+          echo "::set-output name=buildstart::$(./tracebuild now)"
+  test:
+    runs-on: ubuntu-latest
+    needs: setup
     services:
       otelcol:
         image: frigus02/tracebuild-example-app-insights-otelcol
@@ -19,29 +32,68 @@ jobs:
         run: |
           curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
           chmod +x tracebuild
-          echo "BUILD_START=$(./tracebuild now)" >>$GITHUB_ENV
-          echo "BUILD_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
+          echo "STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
           echo "STEP_TOOLCHAIN_START=$(./tracebuild now)" >>$GITHUB_ENV
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - name: "Tracebuild: Report Install toolchain"
-        run: ./tracebuild step --build $BUILD_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
+        run: ./tracebuild step --build ${{needs.setup.outputs.buildid}} --step $STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
       - name: Run cargo test
-        run: ./tracebuild cmd --build $BUILD_ID -- cargo test --all-features
-      - name: Run cargo fmt
-        run: ./tracebuild cmd --build $BUILD_ID -- cargo fmt -- --check
-      - name: Run cargo clippy
-        run: ./tracebuild cmd --build $BUILD_ID -- cargo clippy --all-features
-      - name: "Tracebuild: Report build"
+        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo test --all-features
+      - name: "Tracebuild: Report step"
         if: always()
-        env:
-          JOB_STATUS: ${{ job.status }}
         run: |
-          if [[ "$JOB_STATUS" == "success" ]]; then
-            BUILD_STATUS=success
-          else
-            BUILD_STATUS=failure
-          fi
-          ./tracebuild build --id $BUILD_ID --start-time $BUILD_START --name "tracebuild - Example AppInsights" --branch $GITHUB_REF --commit $GITHUB_SHA --status $BUILD_STATUS
+          STEP_STATUS=$([ "${{job.status}}" == "success" ] && echo success || echo failure)
+          ./tracebuild step --build ${{needs.setup.outputs.buildid}} --id $STEP_ID --start-time $STEP_START --name test --status $STEP_STATUS
+  lint:
+    runs-on: ubuntu-latest
+    needs: setup
+    services:
+      otelcol:
+        image: frigus02/tracebuild-example-app-insights-otelcol
+        ports:
+          - 4317:4317
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: "Tracebuild: Setup and capture start of Install toolchain"
+        run: |
+          curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
+          chmod +x tracebuild
+          echo "STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
+          echo "STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "STEP_TOOLCHAIN_START=$(./tracebuild now)" >>$GITHUB_ENV
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: "Tracebuild: Report Install toolchain"
+        run: ./tracebuild step --build ${{needs.setup.outputs.buildid}} --step $STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
+      - name: Run cargo fmt
+        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo fmt -- --check
+      - name: Run cargo clippy
+        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo clippy --all-features
+      - name: "Tracebuild: Report step"
+        if: always()
+        run: |
+          STEP_STATUS=$([ "${{job.status}}" == "success" ] && echo success || echo failure)
+          ./tracebuild step --build ${{needs.setup.outputs.buildid}} --id $STEP_ID --start-time $STEP_START --name lint --status $STEP_STATUS
+  report_build:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [setup, test, lint]
+    services:
+      otelcol:
+        image: frigus02/tracebuild-example-app-insights-otelcol
+        ports:
+          - 4317:4317
+    steps:
+      - name: "Tracebuild: Report build"
+        run: |
+          curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
+          chmod +x tracebuild
+          BUILD_STATUS=$([ "${{needs.test.result}} ${{needs.lint.result}}" == "success success" ] && echo success || echo failure)
+          ./tracebuild build --id ${{needs.setup.outputs.buildid}} --start-time ${{needs.setup.outputs.buildstart}} --name "tracebuild - Example AppInsights" --branch $GITHUB_REF --commit $GITHUB_SHA --status $BUILD_STATUS
