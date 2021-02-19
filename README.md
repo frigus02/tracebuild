@@ -45,13 +45,15 @@ tracebuild build --id $BUILD_ID --start-time $BUILD_START [--name $BUILD_NAME] [
 
 Configure the exporter using environment variables.
 
-| Variable                           | Description                                                                                                                   | Default                |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| OTEL_TRACES_EXPORTER               | OpenTelemetry trace exporter to use. Supported are: otlp, jaeger                                                              | otlp                   |
-| OTEL_EXPORTER_OTLP_ENDPOINT        |                                                                                                                               | https://localhost:4317 |
-| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT |                                                                                                                               | https://localhost:4317 |
-| OTEL_EXPORTER_JAEGER_AGENT_HOST    |                                                                                                                               | 127.0.0.1              |
-| OTEL_EXPORTER_JAEGER_AGENT_PORT    |                                                                                                                               | 6831                   |
-| OTEL_EXPORTER_JAEGER_ENDPOINT      | Jaeger collector endpoint. If specified, this is used instead of the Jaeger agent. Example: http://localhost:14268/api/traces |                        |
-| OTEL_EXPORTER_JAEGER_USER          | Jaeger collector user for basic auth.                                                                                         |                        |
-| OTEL_EXPORTER_JAEGER_PASSWORD      | Jaeger collector password for basic auth.                                                                                     |                        |
+| Variable                            | Description                                                                                                                   | Default                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| OTEL_TRACES_EXPORTER                | OpenTelemetry traces exporter to use. Supported are: otlp, jaeger                                                             | otlp                   |
+| OTEL_METRICS_EXPORTER               | OpenTelemetry metrics exporter to use. Supported are: otlp                                                                    | otlp                   |
+| OTEL_EXPORTER_OTLP_ENDPOINT         |                                                                                                                               | https://localhost:4317 |
+| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  |                                                                                                                               | https://localhost:4317 |
+| OTEL_EXPORTER_OTLP_METRICS_ENDPOINT |                                                                                                                               | https://localhost:4317 |
+| OTEL_EXPORTER_JAEGER_AGENT_HOST     |                                                                                                                               | 127.0.0.1              |
+| OTEL_EXPORTER_JAEGER_AGENT_PORT     |                                                                                                                               | 6831                   |
+| OTEL_EXPORTER_JAEGER_ENDPOINT       | Jaeger collector endpoint. If specified, this is used instead of the Jaeger agent. Example: http://localhost:14268/api/traces |                        |
+| OTEL_EXPORTER_JAEGER_USER           | Jaeger collector user for basic auth.                                                                                         |                        |
+| OTEL_EXPORTER_JAEGER_PASSWORD       | Jaeger collector password for basic auth.                                                                                     |                        |

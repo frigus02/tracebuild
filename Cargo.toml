@@ -18,9 +18,9 @@ exclude = [
 
 [dependencies]
 nix = "0.19.1"
-opentelemetry = { version = "0.12.0", features = ["tokio-support"] }
+opentelemetry = { version = "0.12.0", features = ["trace", "metrics", "tokio-support"] }
 opentelemetry-jaeger = { version = "0.11.0", features = ["reqwest_collector_client"] }
-opentelemetry-otlp = { version = "0.5.0", features = ["async"] }
+opentelemetry-otlp = { version = "0.5.0", features = ["async", "trace", "metrics"] }
 rand = "0.8.3"
 structopt = "0.3.21"
 thiserror = "1.0.23"
