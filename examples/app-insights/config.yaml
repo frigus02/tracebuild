@@ -1,0 +1,19 @@
+extensions:
+  health_check:
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+exporters:
+  azuremonitor:
+    instrumentation_key: 87324512-e39e-4fdd-ba46-bd08fdeb636f
+    maxbatchinterval: 1ms
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [azuremonitor]
+  extensions: [health_check]
