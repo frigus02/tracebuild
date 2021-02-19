@@ -175,12 +175,12 @@ async fn main() {
             };
 
             let mut labels = Vec::new();
-            labels.push(Key::new("tracebuild.build").string(build.0.to_hex()));
+            labels.push(Key::new("tracebuild_build").string(build.0.to_hex()));
             if let Some(step) = step {
-                labels.push(Key::new("tracebuild.step").string(step.to_hex()));
+                labels.push(Key::new("tracebuild_step").string(step.to_hex()));
             }
-            labels.push(Key::new("tracebuild.name").string(cmd));
-            labels.push(Key::new("tracebuild.status").i64(exit_code.into()));
+            labels.push(Key::new("tracebuild_name").string(cmd));
+            labels.push(Key::new("tracebuild_status").i64(exit_code.into()));
             pipeline
                 .meter
                 .f64_value_recorder("cmd_duration")
@@ -232,15 +232,15 @@ async fn main() {
             }
 
             let mut labels = Vec::new();
-            labels.push(Key::new("tracebuild.build").string(build.0.to_hex()));
+            labels.push(Key::new("tracebuild_build").string(build.0.to_hex()));
             if let Some(step) = step {
-                labels.push(Key::new("tracebuild.step").string(step.to_hex()));
+                labels.push(Key::new("tracebuild_step").string(step.to_hex()));
             }
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild.name").string(name));
+                labels.push(Key::new("tracebuild_name").string(name));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild.status").i64(match status {
+                labels.push(Key::new("tracebuild_status").i64(match status {
                     Status::Success => 1,
                     Status::Failure => 0,
                 }));
@@ -299,16 +299,16 @@ async fn main() {
 
             let mut labels = Vec::new();
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild.name").string(name));
+                labels.push(Key::new("tracebuild_name").string(name));
             }
             if let Some(branch) = branch {
-                labels.push(Key::new("tracebuild.branch").string(branch));
+                labels.push(Key::new("tracebuild_branch").string(branch));
             }
             if let Some(commit) = commit {
-                labels.push(Key::new("tracebuild.commit").string(commit));
+                labels.push(Key::new("tracebuild_commit").string(commit));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild.status").i64(match status {
+                labels.push(Key::new("tracebuild_status").i64(match status {
                     Status::Success => 1,
                     Status::Failure => 0,
                 }));
