@@ -1,9 +1,7 @@
+use futures::{stream::Stream, StreamExt as _};
 use opentelemetry::{
     metrics::{Meter, MeterProvider as _, MetricsError},
-    sdk::{
-        metrics::{selectors, PushController},
-        trace::Tracer,
-    },
+    sdk::{metrics::PushController, trace::Tracer},
     trace::TraceError,
 };
 use std::borrow::Cow;
@@ -60,9 +58,10 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     {
         "otlp" => try_install_otlp_traces_pipeline()?,
         "jaeger" => try_install_jaeger_traces_pipeline()?,
+        "stdout" => install_stdout_traces_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
-                "Unsupported traces exporter {}. Supported are: otlp, jaeger",
+                "Unsupported traces exporter {}. Supported are: otlp, jaeger, stdout",
                 exporter
             )))
         }
@@ -74,9 +73,10 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         .as_ref()
     {
         "otlp" => try_install_otlp_metrics_pipeline()?,
+        "stdout" => install_stdout_metrics_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
-                "Unsupported metrics exporter {}. Supported are: otlp",
+                "Unsupported metrics exporter {}. Supported are: otlp, stdout",
                 exporter
             )))
         }
@@ -96,7 +96,6 @@ fn try_install_otlp_traces_pipeline() -> Result<(Tracer, Uninstall), PipelineErr
         .unwrap_or_else(|_| "https://localhost:4317".into());
     let (tracer, uninstall) = opentelemetry_otlp::new_pipeline()
         .with_endpoint(endpoint)
-        .with_protocol(opentelemetry_otlp::Protocol::Grpc)
         .with_timeout(Duration::from_secs(5))
         .install()?;
     Ok((tracer, Uninstall::Otlp(uninstall)))
@@ -108,18 +107,12 @@ fn try_install_otlp_metrics_pipeline() -> Result<PushController, PipelineError> 
         .unwrap_or_else(|_| "https://localhost:4317".into());
     let export_config = opentelemetry_otlp::ExporterConfig {
         endpoint,
-        protocol: opentelemetry_otlp::Protocol::Grpc,
         ..Default::default()
     };
-    let controller = opentelemetry_otlp::new_metrics_pipeline(
-        tokio::spawn,
-        opentelemetry::util::tokio_interval_stream,
-    )
-    .with_export_config(export_config)
-    .with_aggregator_selector(selectors::simple::Selector::Exact)
-    .with_timeout(Duration::from_secs(5))
-    //.with_period(Duration::from_millis(5))
-    .build()?;
+    let controller = opentelemetry_otlp::new_metrics_pipeline(tokio::spawn, delayed_interval)
+        .with_export_config(export_config)
+        .with_timeout(Duration::from_secs(5))
+        .build()?;
 
     Ok(controller)
 }
@@ -129,20 +122,30 @@ fn try_install_jaeger_traces_pipeline() -> Result<(Tracer, Uninstall), PipelineE
     Ok((tracer, Uninstall::Jaeger(uninstall)))
 }
 
-fn install_fallback_pipeline() -> Pipeline {
+fn install_stdout_traces_pipeline() -> (Tracer, Uninstall) {
     let (tracer, uninstall) = opentelemetry::sdk::export::trace::stdout::new_pipeline().install();
+    (tracer, Uninstall::Stdout(uninstall))
+}
 
-    let controller = opentelemetry::sdk::export::metrics::stdout(
-        tokio::spawn,
-        opentelemetry::util::tokio_interval_stream,
-    )
-    .try_init()
-    .expect("default quantiles configuration is valid");
+fn install_stdout_metrics_pipeline() -> PushController {
+    opentelemetry::sdk::export::metrics::stdout(tokio::spawn, delayed_interval)
+        .try_init()
+        .expect("default quantiles configuration is valid")
+}
+
+fn install_fallback_pipeline() -> Pipeline {
+    let (tracer, uninstall) = install_stdout_traces_pipeline();
+    let controller = install_stdout_metrics_pipeline();
 
     Pipeline {
         tracer,
         meter: controller.provider().meter("tracebuild", None),
         _controller: controller,
-        _uninstall: Uninstall::Stdout(uninstall),
+        _uninstall: uninstall,
     }
+}
+
+// Skip first immediate tick from tokio
+fn delayed_interval(duration: Duration) -> impl Stream<Item = tokio::time::Instant> {
+    opentelemetry::util::tokio_interval_stream(duration).skip(1)
 }
