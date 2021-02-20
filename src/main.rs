@@ -10,11 +10,14 @@ mod pipeline;
 
 use opentelemetry::{
     trace::{FutureExt, Span, SpanId, SpanKind, StatusCode, TraceContextExt, TraceId, Tracer},
-    Context, Key,
+    Context, Key, Unit,
 };
-use std::borrow::Cow;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::{
+    borrow::Cow,
+    fmt::Display,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 use structopt::StructOpt;
 
 fn parse_build_id(src: &str) -> Result<(TraceId, SpanId), Box<dyn std::error::Error>> {
@@ -40,6 +43,15 @@ enum Status {
     Failure,
 }
 
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Status::Success => "success",
+            Status::Failure => "failure",
+        })
+    }
+}
+
 impl FromStr for Status {
     type Err = Box<dyn std::error::Error>;
 
@@ -48,6 +60,15 @@ impl FromStr for Status {
             "success" => Ok(Status::Success),
             "failure" => Ok(Status::Failure),
             _ => Err("invalid status; valid are: success, failure".into()),
+        }
+    }
+}
+
+impl From<&Status> for StatusCode {
+    fn from(status: &Status) -> Self {
+        match status {
+            Status::Success => StatusCode::Ok,
+            Status::Failure => StatusCode::Error,
         }
     }
 }
@@ -177,16 +198,12 @@ async fn main() {
             };
 
             let mut labels = Vec::new();
-            labels.push(Key::new("tracebuild_build").string(build.0.to_hex()));
-            if let Some(step) = step {
-                labels.push(Key::new("tracebuild_step").string(step.to_hex()));
-            }
-            labels.push(Key::new("tracebuild_name").string(cmd));
-            labels.push(Key::new("tracebuild_status").i64(exit_code.into()));
+            labels.push(Key::new("tracebuild.name").string(cmd));
+            labels.push(Key::new("tracebuild.exit_code").i64(exit_code.into()));
             pipeline
                 .meter
-                .f64_value_recorder("cmd_duration")
-                .with_description("Duration of cmd")
+                .f64_value_recorder("tracebuild.cmd.duration")
+                .with_unit(Unit::new("milliseconds"))
                 .init()
                 .record(
                     SystemTime::now()
@@ -224,33 +241,20 @@ async fn main() {
                 .with_kind(SpanKind::Internal)
                 .start(&pipeline.tracer);
             if let Some(status) = &status {
-                span.set_status(
-                    match status {
-                        Status::Success => StatusCode::Ok,
-                        Status::Failure => StatusCode::Error,
-                    },
-                    "".into(),
-                );
+                span.set_status(status.into(), "".into());
             }
 
             let mut labels = Vec::new();
-            labels.push(Key::new("tracebuild_build").string(build.0.to_hex()));
-            if let Some(step) = step {
-                labels.push(Key::new("tracebuild_step").string(step.to_hex()));
-            }
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild_name").string(name));
+                labels.push(Key::new("tracebuild.name").string(name));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild_status").i64(match status {
-                    Status::Success => 1,
-                    Status::Failure => 0,
-                }));
+                labels.push(Key::new("tracebuild.status").string(status.to_string()));
             }
             pipeline
                 .meter
-                .f64_value_recorder("step_duration")
-                .with_description("Duration of step")
+                .f64_value_recorder("tracebuild.step.duration")
+                .with_unit(Unit::new("milliseconds"))
                 .init()
                 .record(
                     SystemTime::now()
@@ -286,39 +290,27 @@ async fn main() {
             if let Some(branch) = branch.clone() {
                 span.set_attribute(Key::new("tracebuild.build.branch").string(branch));
             }
-            if let Some(commit) = commit.clone() {
+            if let Some(commit) = commit {
                 span.set_attribute(Key::new("tracebuild.build.commit").string(commit));
             }
             if let Some(status) = &status {
-                span.set_status(
-                    match status {
-                        Status::Success => StatusCode::Ok,
-                        Status::Failure => StatusCode::Error,
-                    },
-                    "".into(),
-                );
+                span.set_status(status.into(), "".into());
             }
 
             let mut labels = Vec::new();
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild_name").string(name));
+                labels.push(Key::new("tracebuild.name").string(name));
             }
             if let Some(branch) = branch {
-                labels.push(Key::new("tracebuild_branch").string(branch));
-            }
-            if let Some(commit) = commit {
-                labels.push(Key::new("tracebuild_commit").string(commit));
+                labels.push(Key::new("tracebuild.branch").string(branch));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild_status").i64(match status {
-                    Status::Success => 1,
-                    Status::Failure => 0,
-                }));
+                labels.push(Key::new("tracebuild.status").string(status.to_string()));
             }
             pipeline
                 .meter
-                .f64_value_recorder("build_duration")
-                .with_description("Duration of build")
+                .f64_value_recorder("tracebuild.build.duration")
+                .with_unit(Unit::new("milliseconds"))
                 .init()
                 .record(
                     SystemTime::now()

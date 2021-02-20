@@ -159,7 +159,18 @@ struct PrometheusPushFunction {
 
 impl PushFunction for PrometheusPushFunction {
     fn push(&mut self) -> Result<(), MetricsError> {
-        let metric_families = self.exporter.registry().gather();
+        let mut metric_families = self.exporter.registry().gather();
+
+        // Sanitize labels
+        // This should be done in OpenTelemetry Prometheus exporter
+        for mf in metric_families.iter_mut() {
+            for m in mf.mut_metric().iter_mut() {
+                for l in m.mut_label().iter_mut() {
+                    l.set_name(sanitize_prometheus_key(l.get_name()));
+                }
+            }
+        }
+
         prometheus::push_metrics(
             "tracebuild",
             HashMap::new(),
@@ -169,6 +180,24 @@ impl PushFunction for PrometheusPushFunction {
         )
         .map_err(|err| MetricsError::Other(err.to_string()))
     }
+}
+
+fn sanitize_prometheus_key<T: AsRef<str>>(raw: T) -> String {
+    let mut escaped = raw
+        .as_ref()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .peekable();
+
+    let prefix = if escaped.peek().map_or(false, |c| c.is_ascii_digit()) {
+        "key_"
+    } else if escaped.peek().map_or(false, |&c| c == '_') {
+        "key"
+    } else {
+        ""
+    };
+
+    prefix.chars().chain(escaped).take(100).collect()
 }
 
 fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
