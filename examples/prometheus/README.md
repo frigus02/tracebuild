@@ -12,7 +12,7 @@ docker run --rm -it \
 Start Prometheus Pushgateway:
 
 ```
-docker run --rm -it -p 9091:9091 prom/pushgateway
+docker run --rm -it -p 9091:9091 weaveworks/prom-aggregation-gateway -listen ":9091"
 ```
 
 Run tracebuild:

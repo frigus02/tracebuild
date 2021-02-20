@@ -5,7 +5,7 @@ use opentelemetry::{
     sdk::metrics::PushController,
     trace::TraceError,
 };
-use std::{borrow::Cow, collections::HashMap, sync::Arc, time::Duration};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 use thiserror::Error;
 
 pub(crate) struct Pipeline {
@@ -159,6 +159,8 @@ struct PrometheusPushFunction {
 
 impl PushFunction for PrometheusPushFunction {
     fn push(&mut self) -> Result<(), MetricsError> {
+        use prometheus::{Encoder as _, TextEncoder};
+
         let mut metric_families = self.exporter.registry().gather();
 
         // Sanitize labels
@@ -171,14 +173,26 @@ impl PushFunction for PrometheusPushFunction {
             }
         }
 
-        prometheus::push_metrics(
-            "tracebuild",
-            HashMap::new(),
-            &self.endpoint,
-            metric_families,
-            None,
-        )
-        .map_err(|err| MetricsError::Other(err.to_string()))
+        let mut buffer = vec![];
+        let encoder = TextEncoder::new();
+        encoder.encode(&metric_families, &mut buffer).unwrap();
+
+        let agent = ureq::AgentBuilder::new()
+            .timeout_read(Duration::from_secs(5))
+            .timeout_write(Duration::from_secs(5))
+            .build();
+        let response = agent
+            .post(&format!("http://{}/metrics/job/tracebuild", self.endpoint))
+            .set("content-type", encoder.format_type())
+            .send_bytes(&buffer)
+            .map_err(|err| MetricsError::Other(err.to_string()))?;
+        match response.status() {
+            200 | 202 => Ok(()),
+            status => Err(MetricsError::Other(format!(
+                "unexpected status code {}",
+                status
+            ))),
+        }
     }
 }
 
@@ -204,7 +218,9 @@ fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall)
     let host = std::env::var("OTEL_EXPORTER_PROMETHEUS_HOST").unwrap_or_else(|_| "0.0.0.0".into());
     let port = std::env::var("OTEL_EXPORTER_PROMETHEUS_PORT").unwrap_or_else(|_| "9464".into());
     let endpoint = format!("{}:{}", host, port);
-    let exporter = opentelemetry_prometheus::exporter().try_init()?;
+    let exporter = opentelemetry_prometheus::exporter()
+        .with_default_histogram_boundaries(vec![0., 1., 10., 100., 1000.])
+        .try_init()?;
     let meter = exporter.provider()?.meter("tracebuild", None);
     let uninstall = MetricsUninstall::Pull(Box::new(PrometheusPushFunction { exporter, endpoint }));
     Ok((meter, uninstall))
