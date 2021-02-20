@@ -1,16 +1,15 @@
 use futures::{stream::Stream, StreamExt as _};
 use opentelemetry::{
-    metrics::{Meter, MeterProvider as _, MetricsError},
-    sdk::{metrics::PushController, trace::Tracer},
+    global::BoxedTracer,
+    metrics::{noop::NoopMeterCore, Meter, MeterProvider as _, MetricsError},
+    sdk::metrics::PushController,
     trace::TraceError,
 };
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{borrow::Cow, collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
 
 pub(crate) struct Pipeline {
-    pub(crate) tracer: Tracer,
+    pub(crate) tracer: BoxedTracer,
     pub(crate) meter: Meter,
     _traces_uninstall: TracesUninstall,
     _metrics_uninstall: MetricsUninstall,
@@ -19,12 +18,13 @@ pub(crate) struct Pipeline {
 enum TracesUninstall {
     Otlp(opentelemetry_otlp::Uninstall),
     Jaeger(opentelemetry_jaeger::Uninstall),
-    Stdout(opentelemetry::sdk::export::trace::stdout::Uninstall),
+    None,
 }
 
 enum MetricsUninstall {
     Push(PushController),
     Pull(Box<dyn PushFunction>),
+    None,
 }
 
 impl Drop for MetricsUninstall {
@@ -78,7 +78,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     {
         "otlp" => try_install_otlp_traces_pipeline()?,
         "jaeger" => try_install_jaeger_traces_pipeline()?,
-        "stdout" => install_stdout_traces_pipeline(),
+        "none" => install_noop_traces_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
                 "Unsupported traces exporter {}. Supported are: otlp, jaeger, stdout",
@@ -94,7 +94,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     {
         "otlp" => try_install_otlp_metrics_pipeline()?,
         "prometheus" => try_install_prometheus_metrics_pipeline()?,
-        "stdout" => install_stdout_metrics_pipeline(),
+        "none" => install_noop_metrics_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
                 "Unsupported metrics exporter {}. Supported are: otlp, prometheus, stdout",
@@ -111,15 +111,18 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     })
 }
 
-fn try_install_otlp_traces_pipeline() -> Result<(Tracer, TracesUninstall), PipelineError> {
+fn try_install_otlp_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), PipelineError> {
     let endpoint = std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
         .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
         .unwrap_or_else(|_| "https://localhost:4317".into());
-    let (tracer, uninstall) = opentelemetry_otlp::new_pipeline()
+    let (_, uninstall) = opentelemetry_otlp::new_pipeline()
         .with_endpoint(endpoint)
         .with_timeout(Duration::from_secs(5))
         .install()?;
-    Ok((tracer, TracesUninstall::Otlp(uninstall)))
+    Ok((
+        opentelemetry::global::tracer("tracebuild"),
+        TracesUninstall::Otlp(uninstall),
+    ))
 }
 
 fn try_install_otlp_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
@@ -141,9 +144,12 @@ fn try_install_otlp_metrics_pipeline() -> Result<(Meter, MetricsUninstall), Pipe
     ))
 }
 
-fn try_install_jaeger_traces_pipeline() -> Result<(Tracer, TracesUninstall), PipelineError> {
-    let (tracer, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
-    Ok((tracer, TracesUninstall::Jaeger(uninstall)))
+fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), PipelineError> {
+    let (_, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
+    Ok((
+        opentelemetry::global::tracer("tracebuild"),
+        TracesUninstall::Jaeger(uninstall),
+    ))
 }
 
 struct PrometheusPushFunction {
@@ -175,24 +181,21 @@ fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall)
     Ok((meter, uninstall))
 }
 
-fn install_stdout_traces_pipeline() -> (Tracer, TracesUninstall) {
-    let (tracer, uninstall) = opentelemetry::sdk::export::trace::stdout::new_pipeline().install();
-    (tracer, TracesUninstall::Stdout(uninstall))
-}
-
-fn install_stdout_metrics_pipeline() -> (Meter, MetricsUninstall) {
-    let controller = opentelemetry::sdk::export::metrics::stdout(tokio::spawn, delayed_interval)
-        .try_init()
-        .expect("default quantiles configuration is valid");
+fn install_noop_traces_pipeline() -> (BoxedTracer, TracesUninstall) {
     (
-        controller.provider().meter("tracebuild", None),
-        MetricsUninstall::Push(controller),
+        opentelemetry::global::tracer("tracebuild"),
+        TracesUninstall::None,
     )
 }
 
+fn install_noop_metrics_pipeline() -> (Meter, MetricsUninstall) {
+    let meter = Meter::new("tracebuild", None, Arc::new(NoopMeterCore::new()));
+    (meter, MetricsUninstall::None)
+}
+
 fn install_fallback_pipeline() -> Pipeline {
-    let (tracer, traces_uninstall) = install_stdout_traces_pipeline();
-    let (meter, metrics_uninstall) = install_stdout_metrics_pipeline();
+    let (tracer, traces_uninstall) = install_noop_traces_pipeline();
+    let (meter, metrics_uninstall) = install_noop_metrics_pipeline();
 
     Pipeline {
         tracer,

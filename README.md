@@ -47,8 +47,8 @@ Configure the exporter using environment variables.
 
 | Variable                            | Description                                                                                                                   | Default                |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| OTEL_TRACES_EXPORTER                | OpenTelemetry traces exporter to use. Supported are: otlp, jaeger, stdout                                                     | otlp                   |
-| OTEL_METRICS_EXPORTER               | OpenTelemetry metrics exporter to use. Supported are: otlp, prometheus, stdout                                                | otlp                   |
+| OTEL_TRACES_EXPORTER                | OpenTelemetry traces exporter to use. Supported are: otlp, jaeger, none                                                       | otlp                   |
+| OTEL_METRICS_EXPORTER               | OpenTelemetry metrics exporter to use. Supported are: otlp, prometheus, none                                                  | otlp                   |
 | OTEL_EXPORTER_OTLP_ENDPOINT         |                                                                                                                               | https://localhost:4317 |
 | OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  |                                                                                                                               | https://localhost:4317 |
 | OTEL_EXPORTER_OTLP_METRICS_ENDPOINT |                                                                                                                               | https://localhost:4317 |

@@ -156,20 +156,22 @@ async fn main() {
                     ),
                 ])
                 .start(&pipeline.tracer);
+            let cx = Context::current_with_span(span);
             let start_time = SystemTime::now();
             let exit_code = match cmd::fork_with_sigterm(cmd.clone(), args)
-                .with_context(Context::current_with_span(span.clone()))
+                .with_context(cx.clone())
                 .await
             {
                 Ok(exit_status) => {
                     let exit_code = exit_status.code().unwrap_or(1);
-                    span.set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
+                    cx.span()
+                        .set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
                     exit_code
                 }
                 Err(err) => {
                     eprintln!("{}", err);
-                    span.record_exception(&err);
-                    span.set_status(StatusCode::Error, err.to_string());
+                    cx.span().record_exception(&err);
+                    cx.span().set_status(StatusCode::Error, err.to_string());
                     err.suggested_exit_code()
                 }
             };
@@ -194,7 +196,7 @@ async fn main() {
                     &labels,
                 );
 
-            drop(span);
+            drop(cx);
             drop(pipeline);
             std::process::exit(exit_code);
         }
