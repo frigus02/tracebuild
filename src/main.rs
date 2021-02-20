@@ -9,8 +9,9 @@ mod id;
 mod pipeline;
 
 use opentelemetry::{
+    metrics::Meter,
     trace::{FutureExt, Span, SpanId, SpanKind, StatusCode, TraceContextExt, TraceId, Tracer},
-    Context, Key, Unit,
+    Context, Key, KeyValue, Unit,
 };
 use std::{
     borrow::Cow,
@@ -70,6 +71,20 @@ impl From<&Status> for StatusCode {
             Status::Success => StatusCode::Ok,
             Status::Failure => StatusCode::Error,
         }
+    }
+}
+
+fn record_duration_metric(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
+    let duration = SystemTime::now()
+        .duration_since(start_time)
+        .unwrap_or_default();
+    match meter
+        .u64_value_recorder(name)
+        .with_unit(Unit::new("seconds"))
+        .try_init()
+    {
+        Ok(value_recorder) => value_recorder.record(duration.as_secs(), labels),
+        Err(err) => eprintln!("Failed to record metric {}: {}", name, err),
     }
 }
 
@@ -200,18 +215,12 @@ async fn main() {
             let mut labels = Vec::new();
             labels.push(Key::new("tracebuild.name").string(cmd));
             labels.push(Key::new("tracebuild.exit_code").i64(exit_code.into()));
-            pipeline
-                .meter
-                .f64_value_recorder("tracebuild.cmd.duration")
-                .with_unit(Unit::new("milliseconds"))
-                .init()
-                .record(
-                    SystemTime::now()
-                        .duration_since(start_time)
-                        .expect("")
-                        .as_secs_f64(),
-                    &labels,
-                );
+            record_duration_metric(
+                &pipeline.meter,
+                "tracebuild.cmd.duration",
+                start_time,
+                &labels,
+            );
 
             drop(cx);
             drop(pipeline);
@@ -251,18 +260,12 @@ async fn main() {
             if let Some(status) = status {
                 labels.push(Key::new("tracebuild.status").string(status.to_string()));
             }
-            pipeline
-                .meter
-                .f64_value_recorder("tracebuild.step.duration")
-                .with_unit(Unit::new("milliseconds"))
-                .init()
-                .record(
-                    SystemTime::now()
-                        .duration_since(start_time)
-                        .expect("")
-                        .as_secs_f64(),
-                    &labels,
-                );
+            record_duration_metric(
+                &pipeline.meter,
+                "tracebuild.step.duration",
+                start_time,
+                &labels,
+            );
         }
         Args::Build {
             id,
@@ -307,18 +310,12 @@ async fn main() {
             if let Some(status) = status {
                 labels.push(Key::new("tracebuild.status").string(status.to_string()));
             }
-            pipeline
-                .meter
-                .f64_value_recorder("tracebuild.build.duration")
-                .with_unit(Unit::new("milliseconds"))
-                .init()
-                .record(
-                    SystemTime::now()
-                        .duration_since(start_time)
-                        .expect("")
-                        .as_secs_f64(),
-                    &labels,
-                );
+            record_duration_metric(
+                &pipeline.meter,
+                "tracebuild.build.duration",
+                start_time,
+                &labels,
+            );
         }
     }
 }
