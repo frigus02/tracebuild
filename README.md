@@ -26,7 +26,7 @@ STEP_START=$(tracebuild now)
 Wrap each command in:
 
 ```
-tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] -- my-cmd --with params
+tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] [--name <name>] -- my-cmd --with params
 ```
 
 After each step:

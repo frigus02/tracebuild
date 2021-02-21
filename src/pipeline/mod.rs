@@ -1,3 +1,5 @@
+mod prometheus;
+
 use futures::{stream::Stream, StreamExt as _};
 use opentelemetry::{
     global::BoxedTracer,
@@ -23,22 +25,7 @@ enum TracesUninstall {
 
 enum MetricsUninstall {
     Push(PushController),
-    Pull(Box<dyn PushFunction>),
     None,
-}
-
-impl Drop for MetricsUninstall {
-    fn drop(&mut self) {
-        if let Self::Pull(push_func) = self {
-            if let Err(err) = push_func.push() {
-                opentelemetry::global::handle_error(err);
-            }
-        }
-    }
-}
-
-trait PushFunction {
-    fn push(&mut self) -> Result<(), MetricsError>;
 }
 
 #[derive(Debug, Error)]
@@ -152,78 +139,13 @@ fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall)
     ))
 }
 
-struct PrometheusPushFunction {
-    exporter: opentelemetry_prometheus::PrometheusExporter,
-    endpoint: String,
-}
-
-impl PushFunction for PrometheusPushFunction {
-    fn push(&mut self) -> Result<(), MetricsError> {
-        use prometheus::{Encoder as _, TextEncoder};
-
-        let mut metric_families = self.exporter.registry().gather();
-
-        // Sanitize labels
-        // This should be done in OpenTelemetry Prometheus exporter
-        for mf in metric_families.iter_mut() {
-            for m in mf.mut_metric().iter_mut() {
-                for l in m.mut_label().iter_mut() {
-                    l.set_name(sanitize_prometheus_key(l.get_name()));
-                }
-            }
-        }
-
-        let mut buffer = vec![];
-        let encoder = TextEncoder::new();
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-
-        let agent = ureq::AgentBuilder::new()
-            .timeout_read(Duration::from_secs(5))
-            .timeout_write(Duration::from_secs(5))
-            .build();
-        let response = agent
-            .post(&format!("http://{}/metrics/job/tracebuild", self.endpoint))
-            .set("content-type", encoder.format_type())
-            .send_bytes(&buffer)
-            .map_err(|err| MetricsError::Other(err.to_string()))?;
-        match response.status() {
-            200 | 202 => Ok(()),
-            status => Err(MetricsError::Other(format!(
-                "unexpected status code {}",
-                status
-            ))),
-        }
-    }
-}
-
-fn sanitize_prometheus_key<T: AsRef<str>>(raw: T) -> String {
-    let mut escaped = raw
-        .as_ref()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .peekable();
-
-    let prefix = if escaped.peek().map_or(false, |c| c.is_ascii_digit()) {
-        "key_"
-    } else if escaped.peek().map_or(false, |&c| c == '_') {
-        "key"
-    } else {
-        ""
-    };
-
-    prefix.chars().chain(escaped).take(100).collect()
-}
-
 fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
-    let host = std::env::var("OTEL_EXPORTER_PROMETHEUS_HOST").unwrap_or_else(|_| "0.0.0.0".into());
-    let port = std::env::var("OTEL_EXPORTER_PROMETHEUS_PORT").unwrap_or_else(|_| "9464".into());
-    let endpoint = format!("{}:{}", host, port);
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_default_histogram_boundaries(vec![0., 1., 10., 100., 1000.])
-        .try_init()?;
-    let meter = exporter.provider()?.meter("tracebuild", None);
-    let uninstall = MetricsUninstall::Pull(Box::new(PrometheusPushFunction { exporter, endpoint }));
-    Ok((meter, uninstall))
+    let controller =
+        prometheus::build_metrics_pipeline(tokio::spawn, delayed_interval, "tracebuild")?;
+    Ok((
+        controller.provider().meter("tracebuild", None),
+        MetricsUninstall::Push(controller),
+    ))
 }
 
 fn install_noop_traces_pipeline() -> (BoxedTracer, TracesUninstall) {

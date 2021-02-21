@@ -22,10 +22,10 @@ nix = "0.19.1"
 opentelemetry = { version = "0.12.0", features = ["trace", "metrics", "tokio-support"] }
 opentelemetry-jaeger = { version = "0.11.0", features = ["reqwest_collector_client"] }
 opentelemetry-otlp = { version = "0.5.0", features = ["async", "trace", "metrics"] }
-opentelemetry-prometheus = "0.5.0"
 prometheus = { version = "0.11.0", features = ["push"] }
+protobuf = "2.22.0"
 rand = "0.8.3"
+reqwest = "0.11.1"
 structopt = "0.3.21"
 thiserror = "1.0.23"
 tokio = { version = "1.2.0", features = ["macros", "rt", "process"] }
-ureq = "2.0.1"

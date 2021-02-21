@@ -74,17 +74,24 @@ impl From<&Status> for StatusCode {
     }
 }
 
-fn record_duration_metric(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
+fn record_event_duration(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
     let duration = SystemTime::now()
         .duration_since(start_time)
         .unwrap_or_default();
     match meter
-        .u64_value_recorder(name)
+        .f64_value_recorder(name)
         .with_unit(Unit::new("seconds"))
         .try_init()
     {
-        Ok(value_recorder) => value_recorder.record(duration.as_secs(), labels),
-        Err(err) => eprintln!("Failed to record metric {}: {}", name, err),
+        Ok(value_recorder) => value_recorder.record(duration.as_secs_f64(), labels),
+        Err(err) => eprintln!("Failed to record duration {}: {}", name, err),
+    }
+}
+
+fn record_event_count(meter: &Meter, name: &str, labels: &[KeyValue]) {
+    match meter.u64_counter(name).try_init() {
+        Ok(value_recorder) => value_recorder.add(1, labels),
+        Err(err) => eprintln!("Failed to record count {}: {}", name, err),
     }
 }
 
@@ -103,6 +110,9 @@ enum Args {
         /// Optional parent step ID
         #[structopt(long = "step", parse(try_from_str = parse_step_id))]
         step: Option<SpanId>,
+        /// Optional name. Falls back to cmd + args for trace and cmd for metrics
+        #[structopt(long = "name")]
+        name: Option<String>,
         /// Command name
         #[structopt(name = "CMD")]
         cmd: String,
@@ -143,7 +153,7 @@ enum Args {
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
-        /// Optional branch name
+        /// Optional branch name. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "branch")]
         branch: Option<String>,
         /// Optioanl commit SHA
@@ -172,12 +182,17 @@ async fn main() {
         Args::Cmd {
             build,
             step,
+            name,
             cmd,
             args,
         } => {
             let pipeline = pipeline::install_pipeline();
 
-            let span_name = format!("cmd - {} {}", cmd, args.join(" "));
+            let span_name = if let Some(name) = name.clone() {
+                format!("cmd - {}", name)
+            } else {
+                format!("cmd - {} {}", cmd, args.join(" "))
+            };
             let span = pipeline
                 .tracer
                 .span_builder(&span_name)
@@ -213,9 +228,10 @@ async fn main() {
             };
 
             let mut labels = Vec::new();
-            labels.push(Key::new("tracebuild.name").string(cmd));
-            labels.push(Key::new("tracebuild.exit_code").i64(exit_code.into()));
-            record_duration_metric(
+            labels.push(Key::new("name").string(name.unwrap_or(cmd)));
+            labels.push(Key::new("exit_code").i64(exit_code.into()));
+            record_event_count(&pipeline.meter, "tracebuild.cmd.count", &labels);
+            record_event_duration(
                 &pipeline.meter,
                 "tracebuild.cmd.duration",
                 start_time,
@@ -255,12 +271,13 @@ async fn main() {
 
             let mut labels = Vec::new();
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild.name").string(name));
+                labels.push(Key::new("name").string(name));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild.status").string(status.to_string()));
+                labels.push(Key::new("status").string(status.to_string()));
             }
-            record_duration_metric(
+            record_event_count(&pipeline.meter, "tracebuild.step.count", &labels);
+            record_event_duration(
                 &pipeline.meter,
                 "tracebuild.step.duration",
                 start_time,
@@ -302,15 +319,16 @@ async fn main() {
 
             let mut labels = Vec::new();
             if let Some(name) = name {
-                labels.push(Key::new("tracebuild.name").string(name));
+                labels.push(Key::new("name").string(name));
             }
             if let Some(branch) = branch {
-                labels.push(Key::new("tracebuild.branch").string(branch));
+                labels.push(Key::new("branch").string(branch));
             }
             if let Some(status) = status {
-                labels.push(Key::new("tracebuild.status").string(status.to_string()));
+                labels.push(Key::new("status").string(status.to_string()));
             }
-            record_duration_metric(
+            record_event_count(&pipeline.meter, "tracebuild.build.count", &labels);
+            record_event_duration(
                 &pipeline.meter,
                 "tracebuild.build.duration",
                 start_time,
