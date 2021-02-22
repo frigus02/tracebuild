@@ -75,9 +75,7 @@ impl From<&Status> for StatusCode {
 }
 
 fn record_event_duration(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
-    let duration = SystemTime::now()
-        .duration_since(start_time)
-        .unwrap_or_default();
+    let duration = start_time.elapsed().unwrap_or_default();
     match meter
         .f64_value_recorder(name)
         .with_unit(Unit::new("seconds"))
