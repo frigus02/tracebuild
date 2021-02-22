@@ -79,8 +79,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         .unwrap_or_else(|_| "otlp".into())
         .as_ref()
     {
-        "otlp" => try_install_otlp_metrics_pipeline()?,
-        "prometheus" => try_install_prometheus_metrics_pipeline()?,
+        "prometheus" => install_prometheus_metrics_pipeline(),
         "none" => install_noop_metrics_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
@@ -112,25 +111,6 @@ fn try_install_otlp_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), 
     ))
 }
 
-fn try_install_otlp_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
-    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
-        .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
-        .unwrap_or_else(|_| "https://localhost:4317".into());
-    let export_config = opentelemetry_otlp::ExporterConfig {
-        endpoint,
-        ..Default::default()
-    };
-    let controller = opentelemetry_otlp::new_metrics_pipeline(tokio::spawn, delayed_interval)
-        .with_export_config(export_config)
-        .with_timeout(Duration::from_secs(5))
-        .build()?;
-
-    Ok((
-        controller.provider().meter("tracebuild", None),
-        MetricsUninstall::Push(controller),
-    ))
-}
-
 fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), PipelineError> {
     let (_, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
     Ok((
@@ -139,13 +119,13 @@ fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall)
     ))
 }
 
-fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
+fn install_prometheus_metrics_pipeline() -> (Meter, MetricsUninstall) {
     let controller =
-        prometheus::build_metrics_pipeline(tokio::spawn, delayed_interval, "tracebuild")?;
-    Ok((
+        prometheus::build_metrics_pipeline(tokio::spawn, delayed_interval, "tracebuild");
+    (
         controller.provider().meter("tracebuild", None),
         MetricsUninstall::Push(controller),
-    ))
+    )
 }
 
 fn install_noop_traces_pipeline() -> (BoxedTracer, TracesUninstall) {

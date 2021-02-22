@@ -163,19 +163,20 @@ enum Args {
     },
 }
 
-#[tokio::main]
-async fn main() {
+async fn async_main() -> i32 {
     let args = Args::from_args();
     match args {
         Args::ID => {
             let id = id::ID::generate();
             println!("{}", id);
+            0
         }
         Args::Now => {
             let now = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("System time before UNIX EPOCH");
             println!("{}", now.as_secs());
+            0
         }
         Args::Cmd {
             build,
@@ -235,10 +236,7 @@ async fn main() {
                 start_time,
                 &labels,
             );
-
-            drop(cx);
-            drop(pipeline);
-            std::process::exit(exit_code);
+            exit_code
         }
         Args::Step {
             build,
@@ -281,6 +279,7 @@ async fn main() {
                 start_time,
                 &labels,
             );
+            0
         }
         Args::Build {
             id,
@@ -332,6 +331,16 @@ async fn main() {
                 start_time,
                 &labels,
             );
+            0
         }
     }
+}
+
+fn main() {
+    let exit_code = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async_main());
+    std::process::exit(exit_code);
 }

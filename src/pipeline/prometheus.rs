@@ -15,16 +15,13 @@ use opentelemetry::{
     KeyValue,
 };
 use prometheus::{proto::MetricFamily, Encoder as _, TextEncoder};
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 pub(crate) fn build_metrics_pipeline<SP, SO, I, IO, IOI>(
     spawn: SP,
     interval: I,
     push_job_name: &str,
-) -> Result<PushController, MetricsError>
+) -> PushController
 where
     SP: Fn(PushControllerWorker) -> SO,
     I: Fn(Duration) -> IO,
@@ -34,7 +31,7 @@ where
     let port = std::env::var("OTEL_EXPORTER_PROMETHEUS_PORT").unwrap_or_else(|_| "9464".into());
     let export_kind_selector = ExportKindSelector::Cumulative;
     let exporter =
-        PrometheusExporter::new(&host, &port, push_job_name, export_kind_selector.clone())?;
+        PrometheusExporter::new(&host, &port, push_job_name, export_kind_selector.clone());
 
     let controller = controllers::push(
         selectors::simple::Selector::Exact,
@@ -45,17 +42,13 @@ where
     )
     .build();
     global::set_meter_provider(controller.provider());
-    Ok(controller)
-}
-
-enum ExportMessage {
-    Export(Vec<MetricFamily>),
-    Shutdown,
+    controller
 }
 
 #[derive(Clone, Debug)]
 struct PrometheusExporter {
-    sender: Arc<Mutex<tokio::sync::mpsc::Sender<ExportMessage>>>,
+    agent: ureq::Agent,
+    endpoint: String,
     export_kind_selector: Arc<dyn ExportKindFor + Send + Sync>,
 }
 
@@ -65,35 +58,17 @@ impl PrometheusExporter {
         port: &str,
         push_job_name: &str,
         export_selector: T,
-    ) -> Result<Self, MetricsError> {
-        let client = reqwest::Client::builder()
+    ) -> Self {
+        let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(5))
-            .build()
-            .map_err(|err| {
-                MetricsError::Other(format!("Failed to create reqwest client: {}", err))
-            })?;
+            .build();
         let endpoint = format!("http://{}:{}/metrics/job/{}", host, port, push_job_name);
 
-        let (sender, mut receiver) = tokio::sync::mpsc::channel::<ExportMessage>(2);
-        tokio::spawn(Box::pin(async move {
-            while let Some(msg) = receiver.recv().await {
-                match msg {
-                    ExportMessage::Shutdown => {
-                        break;
-                    }
-                    ExportMessage::Export(metric_families) => {
-                        if let Err(err) = push_metrics(&client, &endpoint, metric_families).await {
-                            global::handle_error(err);
-                        }
-                    }
-                }
-            }
-        }));
-
-        Ok(PrometheusExporter {
-            sender: Arc::new(Mutex::new(sender)),
+        Self {
+            agent,
+            endpoint,
             export_kind_selector: Arc::new(export_selector),
-        })
+        }
     }
 }
 
@@ -115,49 +90,28 @@ impl Exporter for PrometheusExporter {
                 Err(err) => Err(err),
             }
         })?;
-        let sender = self.sender.lock()?;
-        sender
-            .try_send(ExportMessage::Export(metric_families))
-            .map_err(|err| MetricsError::Other(err.to_string()))?;
-        Ok(())
+        push_metrics(&self.agent, &self.endpoint, metric_families)
     }
 }
 
-impl Drop for PrometheusExporter {
-    fn drop(&mut self) {
-        if let Err(err) = self
-            .sender
-            .lock()
-            .map_err(MetricsError::from)
-            .and_then(|sender| {
-                sender
-                    .try_send(ExportMessage::Shutdown)
-                    .map_err(|err| MetricsError::Other(err.to_string()))
-            })
-        {
-            global::handle_error(err);
-        }
-    }
-}
-
-async fn push_metrics(
-    client: &reqwest::Client,
+fn push_metrics(
+    agent: &ureq::Agent,
     endpoint: &str,
     metric_families: Vec<MetricFamily>,
 ) -> Result<(), MetricsError> {
     let mut buffer = vec![];
     let encoder = TextEncoder::new();
-    encoder.encode(&metric_families, &mut buffer).unwrap();
+    encoder
+        .encode(&metric_families, &mut buffer)
+        .map_err(|err| MetricsError::Other(format!("Failed to encode metric families: {}", err)))?;
 
-    client
+    let _response = agent
         .post(endpoint)
-        .header(reqwest::header::CONTENT_TYPE, encoder.format_type())
-        .body(buffer)
-        .send()
-        .await
-        .map_err(|err| MetricsError::Other(format!("Failed to connect to push gateway: {}", err)))?
-        .error_for_status()
-        .map_err(|err| MetricsError::Other(format!("Received error from push gateway: {}", err)))?;
+        .set("content-type", encoder.format_type())
+        .send_bytes(&buffer)
+        .map_err(|err| {
+            MetricsError::Other(format!("Failed to send metrics to push gateway: {}", err))
+        })?;
     Ok(())
 }
 
@@ -165,12 +119,12 @@ fn otel_record_into_prom_metric_family(record: &Record) -> Result<MetricFamily, 
     let agg = record.aggregator().ok_or(MetricsError::NoDataCollected)?;
     let number_kind = record.descriptor().number_kind();
 
-    let name = record.descriptor().name().to_owned();
+    let name = sanitize(record.descriptor().name().to_owned());
     let help = record
         .descriptor()
         .description()
         .cloned()
-        .unwrap_or_else(|| name.clone());
+        .unwrap_or_else(|| record.descriptor().name().to_owned());
 
     let mut label_values = Vec::new();
     merge_labels(record, &mut label_values);
