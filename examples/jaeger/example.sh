@@ -4,7 +4,8 @@ set -euo pipefail
 
 export OTEL_TRACES_EXPORTER=jaeger
 
-tracebuild=../../target/debug/tracebuild
+HERE=$(dirname "$0")
+tracebuild="$HERE/../../target/debug/tracebuild"
 
 BUILD_ID=$($tracebuild id)
 BUILD_START=$($tracebuild now)

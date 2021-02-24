@@ -76,7 +76,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
 
     let (meter, metrics_uninstall) = match std::env::var("OTEL_METRICS_EXPORTER")
         .map(Cow::from)
-        .unwrap_or_else(|_| "otlp".into())
+        .unwrap_or_else(|_| "none".into())
         .as_ref()
     {
         "prometheus" => install_prometheus_metrics_pipeline(),
