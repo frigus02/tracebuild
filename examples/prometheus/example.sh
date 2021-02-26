@@ -15,7 +15,7 @@ BUILD_START=$($tracebuild now)
 $tracebuild cmd \
 	--build $BUILD_ID \
 	-- \
-	sleep 3
+	sleep $((1 + $RANDOM % 5))
 
 STEP_ID=$($tracebuild id)
 STEP_START=$($tracebuild now)
@@ -23,12 +23,12 @@ $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 2
+	sleep $((1 + $RANDOM % 50))
 $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 1
+	sleep $((1 + $RANDOM % 100))
 $tracebuild step \
 	--build $BUILD_ID \
 	--id $STEP_ID \
@@ -42,7 +42,7 @@ $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 4
+	sleep $((1 + $RANDOM % 100))
 $tracebuild step \
 	--build $BUILD_ID \
 	--id $STEP_ID \
