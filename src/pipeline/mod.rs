@@ -1,10 +1,8 @@
 mod prometheus;
 
-use futures::{stream::Stream, StreamExt as _};
 use opentelemetry::{
     global::BoxedTracer,
-    metrics::{noop::NoopMeterCore, Meter, MeterProvider as _, MetricsError},
-    sdk::metrics::PushController,
+    metrics::{noop::NoopMeterCore, Meter, MetricsError},
     trace::TraceError,
 };
 use std::{borrow::Cow, sync::Arc, time::Duration};
@@ -24,7 +22,7 @@ enum TracesUninstall {
 }
 
 enum MetricsUninstall {
-    Push(PushController),
+    Prometheus(prometheus::PrometheusPushOnDropExporter),
     None,
 }
 
@@ -79,7 +77,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         .unwrap_or_else(|_| "none".into())
         .as_ref()
     {
-        "prometheus" => install_prometheus_metrics_pipeline(),
+        "prometheus" => try_install_prometheus_metrics_pipeline()?,
         "none" => install_noop_metrics_pipeline(),
         exporter => {
             return Err(PipelineError::Other(format!(
@@ -119,13 +117,12 @@ fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall)
     ))
 }
 
-fn install_prometheus_metrics_pipeline() -> (Meter, MetricsUninstall) {
-    let controller =
-        prometheus::build_metrics_pipeline(tokio::spawn, delayed_interval, "tracebuild");
-    (
-        controller.provider().meter("tracebuild", None),
-        MetricsUninstall::Push(controller),
-    )
+fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
+    let exporter = prometheus::new_prometheus_push_on_drop_exporter()?;
+    Ok((
+        opentelemetry::global::meter("tracebuild"),
+        MetricsUninstall::Prometheus(exporter),
+    ))
 }
 
 fn install_noop_traces_pipeline() -> (BoxedTracer, TracesUninstall) {
@@ -150,9 +147,4 @@ fn install_fallback_pipeline() -> Pipeline {
         _traces_uninstall: traces_uninstall,
         _metrics_uninstall: metrics_uninstall,
     }
-}
-
-// Skip first immediate tick from tokio
-fn delayed_interval(duration: Duration) -> impl Stream<Item = tokio::time::Instant> {
-    opentelemetry::util::tokio_interval_stream(duration).skip(1)
 }

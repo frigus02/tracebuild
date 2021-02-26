@@ -17,15 +17,14 @@ exclude = [
 ]
 
 [dependencies]
-futures = "0.3.12"
-nix = "0.19.1"
+nix = "0.20.0"
 opentelemetry = { version = "0.12.0", features = ["trace", "metrics", "tokio-support"] }
 opentelemetry-jaeger = { version = "0.11.0", features = ["reqwest_collector_client"] }
 opentelemetry-otlp = { version = "0.5.0", features = ["async", "trace"] }
+opentelemetry-prometheus = "0.5.0"
 prometheus = "0.11.0"
-protobuf = "2.22.0"
 rand = "0.8.3"
 structopt = "0.3.21"
-thiserror = "1.0.23"
+thiserror = "1.0.24"
 tokio = { version = "1.2.0", features = ["rt", "rt-multi-thread", "process"] }
 ureq = "2.0.2"

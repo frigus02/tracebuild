@@ -18,10 +18,8 @@ docker run --rm -it -p 9091:9091 weaveworks/prom-aggregation-gateway -listen ":9
 Run tracebuild:
 
 ```
-export OTEL_TRACES_EXPORTER=stdout
-export OTEL_METRICS_EXPORTER=prometheus
-export OTEL_EXPORTER_PROMETHEUS_PORT=9091
-tracebuild cmd --build $(tracebuild id) -- ls
+cargo build
+./example.sh
 ```
 
 See metrics:
