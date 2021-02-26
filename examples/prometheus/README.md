@@ -49,3 +49,5 @@ Open it in your browser:
 ```
 open http://localhost:3000/d/tracebuild
 ```
+
+![](./dashboard.png)
