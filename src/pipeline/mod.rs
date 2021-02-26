@@ -5,7 +5,7 @@ use opentelemetry::{
     metrics::{Meter, MetricsError},
     trace::TraceError,
 };
-use std::{borrow::Cow, time::Duration};
+use std::time::Duration;
 use thiserror::Error;
 
 pub(crate) struct Pipeline {
@@ -68,7 +68,6 @@ pub(crate) fn install_pipeline() -> Pipeline {
 
 fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     let traces_uninstall = match std::env::var("OTEL_TRACES_EXPORTER")
-        .map(Cow::from)
         .unwrap_or_else(|_| "otlp".into())
         .as_ref()
     {
@@ -84,7 +83,6 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
     };
 
     let metrics_uninstall = match std::env::var("OTEL_METRICS_EXPORTER")
-        .map(Cow::from)
         .unwrap_or_else(|_| "none".into())
         .as_ref()
     {
