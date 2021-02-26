@@ -2,10 +2,10 @@ mod prometheus;
 
 use opentelemetry::{
     global::BoxedTracer,
-    metrics::{noop::NoopMeterCore, Meter, MetricsError},
+    metrics::{Meter, MetricsError},
     trace::TraceError,
 };
-use std::{borrow::Cow, sync::Arc, time::Duration};
+use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
 
 pub(crate) struct Pipeline {
@@ -13,6 +13,17 @@ pub(crate) struct Pipeline {
     pub(crate) meter: Meter,
     _traces_uninstall: TracesUninstall,
     _metrics_uninstall: MetricsUninstall,
+}
+
+impl Pipeline {
+    fn new(traces_uninstall: TracesUninstall, metrics_uninstall: MetricsUninstall) -> Self {
+        Self {
+            tracer: opentelemetry::global::tracer("tracebuild"),
+            meter: opentelemetry::global::meter("tracebuild"),
+            _traces_uninstall: traces_uninstall,
+            _metrics_uninstall: metrics_uninstall,
+        }
+    }
 }
 
 enum TracesUninstall {
@@ -56,7 +67,7 @@ pub(crate) fn install_pipeline() -> Pipeline {
 }
 
 fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
-    let (tracer, traces_uninstall) = match std::env::var("OTEL_TRACES_EXPORTER")
+    let traces_uninstall = match std::env::var("OTEL_TRACES_EXPORTER")
         .map(Cow::from)
         .unwrap_or_else(|_| "otlp".into())
         .as_ref()
@@ -72,7 +83,7 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         }
     };
 
-    let (meter, metrics_uninstall) = match std::env::var("OTEL_METRICS_EXPORTER")
+    let metrics_uninstall = match std::env::var("OTEL_METRICS_EXPORTER")
         .map(Cow::from)
         .unwrap_or_else(|_| "none".into())
         .as_ref()
@@ -87,15 +98,10 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         }
     };
 
-    Ok(Pipeline {
-        tracer,
-        meter,
-        _traces_uninstall: traces_uninstall,
-        _metrics_uninstall: metrics_uninstall,
-    })
+    Ok(Pipeline::new(traces_uninstall, metrics_uninstall))
 }
 
-fn try_install_otlp_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), PipelineError> {
+fn try_install_otlp_traces_pipeline() -> Result<TracesUninstall, PipelineError> {
     let endpoint = std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
         .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
         .unwrap_or_else(|_| "https://localhost:4317".into());
@@ -103,48 +109,30 @@ fn try_install_otlp_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), 
         .with_endpoint(endpoint)
         .with_timeout(Duration::from_secs(5))
         .install()?;
-    Ok((
-        opentelemetry::global::tracer("tracebuild"),
-        TracesUninstall::Otlp(uninstall),
-    ))
+    Ok(TracesUninstall::Otlp(uninstall))
 }
 
-fn try_install_jaeger_traces_pipeline() -> Result<(BoxedTracer, TracesUninstall), PipelineError> {
+fn try_install_jaeger_traces_pipeline() -> Result<TracesUninstall, PipelineError> {
     let (_, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
-    Ok((
-        opentelemetry::global::tracer("tracebuild"),
-        TracesUninstall::Jaeger(uninstall),
-    ))
+    Ok(TracesUninstall::Jaeger(uninstall))
 }
 
-fn try_install_prometheus_metrics_pipeline() -> Result<(Meter, MetricsUninstall), PipelineError> {
+fn try_install_prometheus_metrics_pipeline() -> Result<MetricsUninstall, PipelineError> {
     let exporter = prometheus::new_prometheus_push_on_drop_exporter()?;
-    Ok((
-        opentelemetry::global::meter("tracebuild"),
-        MetricsUninstall::Prometheus(exporter),
-    ))
+    Ok(MetricsUninstall::Prometheus(exporter))
 }
 
-fn install_noop_traces_pipeline() -> (BoxedTracer, TracesUninstall) {
-    (
-        opentelemetry::global::tracer("tracebuild"),
-        TracesUninstall::None,
-    )
+fn install_noop_traces_pipeline() -> TracesUninstall {
+    TracesUninstall::None
 }
 
-fn install_noop_metrics_pipeline() -> (Meter, MetricsUninstall) {
-    let meter = Meter::new("tracebuild", None, Arc::new(NoopMeterCore::new()));
-    (meter, MetricsUninstall::None)
+fn install_noop_metrics_pipeline() -> MetricsUninstall {
+    MetricsUninstall::None
 }
 
 fn install_fallback_pipeline() -> Pipeline {
-    let (tracer, traces_uninstall) = install_noop_traces_pipeline();
-    let (meter, metrics_uninstall) = install_noop_metrics_pipeline();
+    let traces_uninstall = install_noop_traces_pipeline();
+    let metrics_uninstall = install_noop_metrics_pipeline();
 
-    Pipeline {
-        tracer,
-        meter,
-        _traces_uninstall: traces_uninstall,
-        _metrics_uninstall: metrics_uninstall,
-    }
+    Pipeline::new(traces_uninstall, metrics_uninstall)
 }

@@ -108,7 +108,7 @@ enum Args {
         /// Optional parent step ID
         #[structopt(long = "step", parse(try_from_str = parse_step_id))]
         step: Option<SpanId>,
-        /// Optional name. Falls back to cmd + args for trace and cmd for metrics
+        /// Optional name. Falls back to cmd + args for traces and cmd for metrics
         #[structopt(long = "name")]
         name: Option<String>,
         /// Command name
