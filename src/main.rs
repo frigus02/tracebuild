@@ -9,12 +9,16 @@ mod id;
 mod pipeline;
 
 use opentelemetry::{
+    metrics::Meter,
     trace::{FutureExt, Span, SpanId, SpanKind, StatusCode, TraceContextExt, TraceId, Tracer},
-    Context, Key,
+    Context, Key, KeyValue, Unit,
 };
-use std::borrow::Cow;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::{
+    borrow::Cow,
+    fmt::Display,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 use structopt::StructOpt;
 
 fn parse_build_id(src: &str) -> Result<(TraceId, SpanId), Box<dyn std::error::Error>> {
@@ -40,6 +44,15 @@ enum Status {
     Failure,
 }
 
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Status::Success => "success",
+            Status::Failure => "failure",
+        })
+    }
+}
+
 impl FromStr for Status {
     type Err = Box<dyn std::error::Error>;
 
@@ -49,6 +62,34 @@ impl FromStr for Status {
             "failure" => Ok(Status::Failure),
             _ => Err("invalid status; valid are: success, failure".into()),
         }
+    }
+}
+
+impl From<&Status> for StatusCode {
+    fn from(status: &Status) -> Self {
+        match status {
+            Status::Success => StatusCode::Ok,
+            Status::Failure => StatusCode::Error,
+        }
+    }
+}
+
+fn record_event_duration(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
+    let duration = start_time.elapsed().unwrap_or_default();
+    match meter
+        .f64_value_recorder(name)
+        .with_unit(Unit::new("seconds"))
+        .try_init()
+    {
+        Ok(value_recorder) => value_recorder.record(duration.as_secs_f64(), labels),
+        Err(err) => eprintln!("Failed to record duration {}: {}", name, err),
+    }
+}
+
+fn record_event_count(meter: &Meter, name: &str, labels: &[KeyValue]) {
+    match meter.u64_counter(name).try_init() {
+        Ok(value_recorder) => value_recorder.add(1, labels),
+        Err(err) => eprintln!("Failed to record count {}: {}", name, err),
     }
 }
 
@@ -67,6 +108,9 @@ enum Args {
         /// Optional parent step ID
         #[structopt(long = "step", parse(try_from_str = parse_step_id))]
         step: Option<SpanId>,
+        /// Optional name. Falls back to cmd + args for traces and cmd for metrics
+        #[structopt(long = "name")]
+        name: Option<String>,
         /// Command name
         #[structopt(name = "CMD")]
         cmd: String,
@@ -107,7 +151,7 @@ enum Args {
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
-        /// Optional branch name
+        /// Optional branch name. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "branch")]
         branch: Option<String>,
         /// Optioanl commit SHA
@@ -119,29 +163,37 @@ enum Args {
     },
 }
 
-#[tokio::main]
-async fn main() {
+async fn async_main() -> i32 {
     let args = Args::from_args();
     match args {
         Args::ID => {
             let id = id::ID::generate();
             println!("{}", id);
+            0
         }
         Args::Now => {
             let now = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("System time before UNIX EPOCH");
             println!("{}", now.as_secs());
+            0
         }
         Args::Cmd {
             build,
             step,
+            name,
             cmd,
             args,
         } => {
-            let (tracer, uninstall) = pipeline::install_pipeline();
-            let span_name = format!("cmd - {} {}", cmd, args.join(" "));
-            let span = tracer
+            let pipeline = pipeline::install_pipeline();
+
+            let span_name = if let Some(name) = name.clone() {
+                format!("cmd - {}", name)
+            } else {
+                format!("cmd - {} {}", cmd, args.join(" "))
+            };
+            let span = pipeline
+                .tracer
                 .span_builder(&span_name)
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_kind(SpanKind::Client)
@@ -153,26 +205,38 @@ async fn main() {
                             .collect::<Vec<_>>(),
                     ),
                 ])
-                .start(&tracer);
-            let exit_code = match cmd::fork_with_sigterm(cmd, args)
-                .with_context(Context::current_with_span(span.clone()))
+                .start(&pipeline.tracer);
+            let cx = Context::current_with_span(span);
+            let start_time = SystemTime::now();
+            let exit_code = match cmd::fork_with_sigterm(cmd.clone(), args)
+                .with_context(cx.clone())
                 .await
             {
                 Ok(exit_status) => {
                     let exit_code = exit_status.code().unwrap_or(1);
-                    span.set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
+                    cx.span()
+                        .set_attribute(Key::new("tracebuild.cmd.exit_code").i64(exit_code.into()));
                     exit_code
                 }
                 Err(err) => {
                     eprintln!("{}", err);
-                    span.record_exception(&err);
-                    span.set_status(StatusCode::Error, err.to_string());
+                    cx.span().record_exception(&err);
+                    cx.span().set_status(StatusCode::Error, err.to_string());
                     err.suggested_exit_code()
                 }
             };
-            drop(span);
-            drop(uninstall);
-            std::process::exit(exit_code);
+
+            let mut labels = Vec::new();
+            labels.push(Key::new("name").string(name.unwrap_or(cmd)));
+            labels.push(Key::new("exit_code").i64(exit_code.into()));
+            record_event_count(&pipeline.meter, "tracebuild.cmd.count", &labels);
+            record_event_duration(
+                &pipeline.meter,
+                "tracebuild.cmd.duration",
+                start_time,
+                &labels,
+            );
+            exit_code
         }
         Args::Step {
             build,
@@ -182,28 +246,40 @@ async fn main() {
             name,
             status,
         } => {
-            let (tracer, _uninstall) = pipeline::install_pipeline();
-            let span_name: Cow<'static, str> = if let Some(name) = name {
+            let pipeline = pipeline::install_pipeline();
+
+            let span_name: Cow<'static, str> = if let Some(name) = name.clone() {
                 format!("step - {}", name).into()
             } else {
                 "step".into()
             };
-            let span = tracer
+            let span = pipeline
+                .tracer
                 .span_builder(&span_name)
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_start_time(start_time)
                 .with_span_id(id)
                 .with_kind(SpanKind::Internal)
-                .start(&tracer);
-            if let Some(status) = status {
-                span.set_status(
-                    match status {
-                        Status::Success => StatusCode::Ok,
-                        Status::Failure => StatusCode::Error,
-                    },
-                    "".into(),
-                );
+                .start(&pipeline.tracer);
+            if let Some(status) = &status {
+                span.set_status(status.into(), "".into());
             }
+
+            let mut labels = Vec::new();
+            if let Some(name) = name {
+                labels.push(Key::new("name").string(name));
+            }
+            if let Some(status) = status {
+                labels.push(Key::new("status").string(status.to_string()));
+            }
+            record_event_count(&pipeline.meter, "tracebuild.step.count", &labels);
+            record_event_duration(
+                &pipeline.meter,
+                "tracebuild.step.duration",
+                start_time,
+                &labels,
+            );
+            0
         }
         Args::Build {
             id,
@@ -213,34 +289,58 @@ async fn main() {
             commit,
             status,
         } => {
-            let (tracer, _uninstall) = pipeline::install_pipeline();
-            let span_name: Cow<'static, str> = if let Some(name) = name {
+            let pipeline = pipeline::install_pipeline();
+
+            let span_name: Cow<'static, str> = if let Some(name) = name.clone() {
                 format!("build - {}", name).into()
             } else {
                 "build".into()
             };
-            let span = tracer
+            let span = pipeline
+                .tracer
                 .span_builder(&span_name)
                 .with_start_time(start_time)
                 .with_trace_id(id.0)
                 .with_span_id(id.1)
                 .with_kind(SpanKind::Internal)
-                .start(&tracer);
-            if let Some(branch) = branch {
+                .start(&pipeline.tracer);
+            if let Some(branch) = branch.clone() {
                 span.set_attribute(Key::new("tracebuild.build.branch").string(branch));
             }
             if let Some(commit) = commit {
                 span.set_attribute(Key::new("tracebuild.build.commit").string(commit));
             }
-            if let Some(status) = status {
-                span.set_status(
-                    match status {
-                        Status::Success => StatusCode::Ok,
-                        Status::Failure => StatusCode::Error,
-                    },
-                    "".into(),
-                );
+            if let Some(status) = &status {
+                span.set_status(status.into(), "".into());
             }
+
+            let mut labels = Vec::new();
+            if let Some(name) = name {
+                labels.push(Key::new("name").string(name));
+            }
+            if let Some(branch) = branch {
+                labels.push(Key::new("branch").string(branch));
+            }
+            if let Some(status) = status {
+                labels.push(Key::new("status").string(status.to_string()));
+            }
+            record_event_count(&pipeline.meter, "tracebuild.build.count", &labels);
+            record_event_duration(
+                &pipeline.meter,
+                "tracebuild.build.duration",
+                start_time,
+                &labels,
+            );
+            0
         }
     }
+}
+
+fn main() {
+    let exit_code = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async_main());
+    std::process::exit(exit_code);
 }

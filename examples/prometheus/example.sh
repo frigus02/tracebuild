@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-export OTEL_TRACES_EXPORTER=jaeger
+export OTEL_TRACES_EXPORTER=none
+export OTEL_METRICS_EXPORTER=prometheus
+export OTEL_EXPORTER_PROMETHEUS_PORT=9091
 
 HERE=$(dirname "$0")
 tracebuild="$HERE/../../target/debug/tracebuild"
@@ -13,7 +15,7 @@ BUILD_START=$($tracebuild now)
 $tracebuild cmd \
 	--build $BUILD_ID \
 	-- \
-	sleep 2
+	sleep $((1 + $RANDOM % 5))
 
 STEP_ID=$($tracebuild id)
 STEP_START=$($tracebuild now)
@@ -21,12 +23,12 @@ $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 1
+	sleep $((1 + $RANDOM % 50))
 $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 1
+	sleep $((1 + $RANDOM % 100))
 $tracebuild step \
 	--build $BUILD_ID \
 	--id $STEP_ID \
@@ -40,12 +42,7 @@ $tracebuild cmd \
 	--build $BUILD_ID \
 	--step $STEP_ID \
 	-- \
-	sleep 1
-$tracebuild cmd \
-	--build $BUILD_ID \
-	--step $STEP_ID \
-	-- \
-	sleep 1
+	sleep $((1 + $RANDOM % 100))
 $tracebuild step \
 	--build $BUILD_ID \
 	--id $STEP_ID \
@@ -58,4 +55,4 @@ $tracebuild build \
 	--start-time $BUILD_START \
 	--name example \
 	--status success \
-	--commit $(git rev-parse HEAD)
+	--branch main
