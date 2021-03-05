@@ -7,6 +7,7 @@ mod cmd;
 mod context;
 mod id;
 mod pipeline;
+mod status;
 mod timestamp;
 
 use id::{BuildID, StepID};
@@ -15,44 +16,10 @@ use opentelemetry::{
     trace::{FutureExt, Span, SpanKind, StatusCode, TraceContextExt, Tracer},
     Context, Key, KeyValue, Unit,
 };
-use std::{borrow::Cow, fmt::Display, str::FromStr};
+use status::Status;
+use std::borrow::Cow;
 use structopt::StructOpt;
 use timestamp::Timestamp;
-
-enum Status {
-    Success,
-    Failure,
-}
-
-impl Display for Status {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Status::Success => "success",
-            Status::Failure => "failure",
-        })
-    }
-}
-
-impl FromStr for Status {
-    type Err = Box<dyn std::error::Error>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "success" => Ok(Status::Success),
-            "failure" => Ok(Status::Failure),
-            _ => Err("invalid status; valid are: success, failure".into()),
-        }
-    }
-}
-
-impl From<&Status> for StatusCode {
-    fn from(status: &Status) -> Self {
-        match status {
-            Status::Success => StatusCode::Ok,
-            Status::Failure => StatusCode::Error,
-        }
-    }
-}
 
 fn record_event_duration(meter: &Meter, name: &str, start_time: Timestamp, labels: &[KeyValue]) {
     let duration = start_time.system_time().elapsed().unwrap_or_default();
