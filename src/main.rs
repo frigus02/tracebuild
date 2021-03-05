@@ -8,9 +8,10 @@ mod context;
 mod id;
 mod pipeline;
 
+use id::{BuildID, StepID};
 use opentelemetry::{
     metrics::Meter,
-    trace::{FutureExt, Span, SpanId, SpanKind, StatusCode, TraceContextExt, TraceId, Tracer},
+    trace::{FutureExt, Span, SpanKind, StatusCode, TraceContextExt, Tracer},
     Context, Key, KeyValue, Unit,
 };
 use std::{
@@ -20,16 +21,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 use structopt::StructOpt;
-
-fn parse_build_id(src: &str) -> Result<(TraceId, SpanId), Box<dyn std::error::Error>> {
-    let id: id::ID = src.parse()?;
-    Ok((id.trace_id(), id.span_id()))
-}
-
-fn parse_step_id(src: &str) -> Result<SpanId, Box<dyn std::error::Error>> {
-    let id: id::ID = src.parse()?;
-    Ok(id.span_id())
-}
 
 fn parse_system_time(src: &str) -> Result<SystemTime, Box<dyn std::error::Error>> {
     let secs_since_epoch = u64::from_str_radix(src, 10)?;
@@ -103,11 +94,11 @@ enum Args {
     /// exporter.
     Cmd {
         /// Build ID
-        #[structopt(long = "build", parse(try_from_str = parse_build_id))]
-        build: (TraceId, SpanId),
+        #[structopt(long = "build")]
+        build: BuildID,
         /// Optional parent step ID
-        #[structopt(long = "step", parse(try_from_str = parse_step_id))]
-        step: Option<SpanId>,
+        #[structopt(long = "step")]
+        step: Option<StepID>,
         /// Optional name. Falls back to cmd + args for traces and cmd for metrics
         #[structopt(long = "name")]
         name: Option<String>,
@@ -122,14 +113,14 @@ enum Args {
     /// build and optional parent step.
     Step {
         /// Build ID
-        #[structopt(long = "build", parse(try_from_str = parse_build_id))]
-        build: (TraceId, SpanId),
+        #[structopt(long = "build")]
+        build: BuildID,
         /// Optional parent step ID
-        #[structopt(long = "step", parse(try_from_str = parse_step_id))]
-        step: Option<SpanId>,
+        #[structopt(long = "step")]
+        step: Option<StepID>,
         /// Step ID
-        #[structopt(long = "id", parse(try_from_str = parse_step_id))]
-        id: SpanId,
+        #[structopt(long = "id")]
+        id: StepID,
         /// Start time
         #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
         start_time: SystemTime,
@@ -143,8 +134,8 @@ enum Args {
     /// Reports a span using the configured OpenTelemetry exporter with the given ID and metadata.
     Build {
         /// Build ID
-        #[structopt(long = "id", parse(try_from_str = parse_build_id))]
-        id: (TraceId, SpanId),
+        #[structopt(long = "id")]
+        id: BuildID,
         /// Start time
         #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
         start_time: SystemTime,
@@ -167,7 +158,7 @@ async fn async_main() -> i32 {
     let args = Args::from_args();
     match args {
         Args::ID => {
-            let id = id::ID::generate();
+            let id = BuildID::generate();
             println!("{}", id);
             0
         }
@@ -258,7 +249,7 @@ async fn async_main() -> i32 {
                 .span_builder(&span_name)
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_start_time(start_time)
-                .with_span_id(id)
+                .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
                 .start(&pipeline.tracer);
             if let Some(status) = &status {
@@ -300,8 +291,8 @@ async fn async_main() -> i32 {
                 .tracer
                 .span_builder(&span_name)
                 .with_start_time(start_time)
-                .with_trace_id(id.0)
-                .with_span_id(id.1)
+                .with_trace_id(id.trace_id())
+                .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
                 .start(&pipeline.tracer);
             if let Some(branch) = branch.clone() {

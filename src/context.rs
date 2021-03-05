@@ -1,12 +1,13 @@
+use crate::id::{BuildID, StepID};
 use opentelemetry::{
-    trace::{SpanId, TraceContextExt as _, TraceId, TRACE_FLAG_SAMPLED},
+    trace::{TraceContextExt as _, TRACE_FLAG_SAMPLED},
     Context,
 };
 
-pub(crate) fn get_parent_context(build: (TraceId, SpanId), step: Option<SpanId>) -> Context {
+pub(crate) fn get_parent_context(build: BuildID, step: Option<StepID>) -> Context {
     let span_context = opentelemetry::trace::SpanContext::new(
-        build.0,
-        step.unwrap_or(build.1),
+        build.trace_id(),
+        step.map(|s| s.span_id()).unwrap_or_else(|| build.span_id()),
         TRACE_FLAG_SAMPLED,
         true,
         Default::default(),

@@ -3,12 +3,12 @@ use rand::prelude::*;
 use std::fmt::Display;
 use std::str::FromStr;
 
-pub(crate) struct ID {
+pub(crate) struct BuildID {
     trace: u128,
     span: u64,
 }
 
-impl ID {
+impl BuildID {
     pub(crate) fn generate() -> Self {
         Self {
             trace: rand::thread_rng().gen(),
@@ -25,7 +25,7 @@ impl ID {
     }
 }
 
-impl FromStr for ID {
+impl FromStr for BuildID {
     type Err = Box<dyn std::error::Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -40,8 +40,30 @@ impl FromStr for ID {
     }
 }
 
-impl Display for ID {
+impl Display for BuildID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:032x}{:016x}", self.trace, self.span)
+    }
+}
+
+pub(crate) struct StepID(BuildID);
+
+impl StepID {
+    pub(crate) fn span_id(&self) -> SpanId {
+        self.0.span_id()
+    }
+}
+
+impl FromStr for StepID {
+    type Err = Box<dyn std::error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        BuildID::from_str(s).map(Self)
+    }
+}
+
+impl Display for StepID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
