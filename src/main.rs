@@ -7,6 +7,7 @@ mod cmd;
 mod context;
 mod id;
 mod pipeline;
+mod timestamp;
 
 use id::{BuildID, StepID};
 use opentelemetry::{
@@ -14,21 +15,9 @@ use opentelemetry::{
     trace::{FutureExt, Span, SpanKind, StatusCode, TraceContextExt, Tracer},
     Context, Key, KeyValue, Unit,
 };
-use std::{
-    borrow::Cow,
-    fmt::Display,
-    str::FromStr,
-    time::{Duration, SystemTime},
-};
+use std::{borrow::Cow, fmt::Display, str::FromStr};
 use structopt::StructOpt;
-
-fn parse_system_time(src: &str) -> Result<SystemTime, Box<dyn std::error::Error>> {
-    let secs_since_epoch = u64::from_str_radix(src, 10)?;
-    let since_epoch = Duration::from_secs(secs_since_epoch);
-    Ok(SystemTime::UNIX_EPOCH
-        .checked_add(since_epoch)
-        .ok_or("secs is too large")?)
-}
+use timestamp::Timestamp;
 
 enum Status {
     Success,
@@ -65,8 +54,8 @@ impl From<&Status> for StatusCode {
     }
 }
 
-fn record_event_duration(meter: &Meter, name: &str, start_time: SystemTime, labels: &[KeyValue]) {
-    let duration = start_time.elapsed().unwrap_or_default();
+fn record_event_duration(meter: &Meter, name: &str, start_time: Timestamp, labels: &[KeyValue]) {
+    let duration = start_time.system_time().elapsed().unwrap_or_default();
     match meter
         .f64_value_recorder(name)
         .with_unit(Unit::new("seconds"))
@@ -122,8 +111,8 @@ enum Args {
         #[structopt(long = "id")]
         id: StepID,
         /// Start time
-        #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
-        start_time: SystemTime,
+        #[structopt(long = "start-time")]
+        start_time: Timestamp,
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
@@ -137,8 +126,8 @@ enum Args {
         #[structopt(long = "id")]
         id: BuildID,
         /// Start time
-        #[structopt(long = "start-time", parse(try_from_str = parse_system_time))]
-        start_time: SystemTime,
+        #[structopt(long = "start-time")]
+        start_time: Timestamp,
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
@@ -163,10 +152,8 @@ async fn async_main() -> i32 {
             0
         }
         Args::Now => {
-            let now = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("System time before UNIX EPOCH");
-            println!("{}", now.as_secs());
+            let now = Timestamp::now();
+            println!("{}", now);
             0
         }
         Args::Cmd {
@@ -198,7 +185,7 @@ async fn async_main() -> i32 {
                 ])
                 .start(&pipeline.tracer);
             let cx = Context::current_with_span(span);
-            let start_time = SystemTime::now();
+            let start_time = Timestamp::now();
             let exit_code = match cmd::fork_with_sigterm(cmd.clone(), args)
                 .with_context(cx.clone())
                 .await
@@ -248,7 +235,7 @@ async fn async_main() -> i32 {
                 .tracer
                 .span_builder(&span_name)
                 .with_parent_context(context::get_parent_context(build, step))
-                .with_start_time(start_time)
+                .with_start_time(start_time.system_time())
                 .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
                 .start(&pipeline.tracer);
@@ -290,7 +277,7 @@ async fn async_main() -> i32 {
             let span = pipeline
                 .tracer
                 .span_builder(&span_name)
-                .with_start_time(start_time)
+                .with_start_time(start_time.system_time())
                 .with_trace_id(id.trace_id())
                 .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
