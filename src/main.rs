@@ -43,16 +43,16 @@ enum Args {
     /// exporter.
     Cmd {
         /// Build ID
-        #[structopt(long = "build")]
+        #[structopt(long = "build", env = "TRACEBUILD_BUILD_ID")]
         build: BuildID,
         /// Optional parent step ID
-        #[structopt(long = "step")]
+        #[structopt(long = "step", env = "TRACEBUILD_STEP_ID")]
         step: Option<StepID>,
         /// Optional name. Falls back to cmd + args. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "name")]
         name: Option<String>,
         /// Optional build name
-        #[structopt(long = "build-name")]
+        #[structopt(long = "build-name", env = "TRACEBUILD_BUILD_NAME")]
         build_name: Option<String>,
         /// Command name
         #[structopt(name = "CMD")]
@@ -65,22 +65,22 @@ enum Args {
     /// build and optional parent step.
     Step {
         /// Build ID
-        #[structopt(long = "build")]
+        #[structopt(long = "build", env = "TRACEBUILD_BUILD_ID")]
         build: BuildID,
         /// Optional parent step ID
         #[structopt(long = "step")]
         step: Option<StepID>,
         /// Step ID
-        #[structopt(long = "id")]
+        #[structopt(long = "id", env = "TRACEBUILD_STEP_ID")]
         id: StepID,
         /// Start time
-        #[structopt(long = "start-time")]
+        #[structopt(long = "start-time", env = "TRACEBUILD_STEP_START")]
         start_time: Timestamp,
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
         /// Optional build name
-        #[structopt(long = "build-name")]
+        #[structopt(long = "build-name", env = "TRACEBUILD_BUILD_NAME")]
         build_name: Option<String>,
         /// Optional status
         #[structopt(long = "status")]
@@ -89,13 +89,13 @@ enum Args {
     /// Reports a span using the configured OpenTelemetry exporter with the given ID and metadata.
     Build {
         /// Build ID
-        #[structopt(long = "id")]
+        #[structopt(long = "id", env = "TRACEBUILD_BUILD_ID")]
         id: BuildID,
         /// Start time
-        #[structopt(long = "start-time")]
+        #[structopt(long = "start-time", env = "TRACEBUILD_BUILD_START")]
         start_time: Timestamp,
         /// Optional name
-        #[structopt(long = "name")]
+        #[structopt(long = "name", env = "TRACEBUILD_BUILD_NAME")]
         name: Option<String>,
         /// Optional branch name. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "branch")]

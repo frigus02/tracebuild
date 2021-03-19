@@ -32,22 +32,23 @@ jobs:
         run: |
           curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
           chmod +x tracebuild
-          echo "STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
-          echo "STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "TRACEBUILD_BUILD_ID=${{needs.setup.outputs.buildid}}" >>$GITHUB_ENV
+          echo "TRACEBUILD_STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "TRACEBUILD_STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
           echo "STEP_TOOLCHAIN_START=$(./tracebuild now)" >>$GITHUB_ENV
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - name: "Tracebuild: Report Install toolchain"
-        run: ./tracebuild step --build ${{needs.setup.outputs.buildid}} --step $STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
+        run: ./tracebuild step --step $TRACEBUILD_STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
       - name: Run cargo test
-        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo test --all-features
+        run: ./tracebuild cmd -- cargo test --all-features
       - name: "Tracebuild: Report step"
         if: always()
         run: |
           STEP_STATUS=$([ "${{job.status}}" == "success" ] && echo success || echo failure)
-          ./tracebuild step --build ${{needs.setup.outputs.buildid}} --id $STEP_ID --start-time $STEP_START --name test --status $STEP_STATUS
+          ./tracebuild step --name test --status $STEP_STATUS
   lint:
     runs-on: ubuntu-latest
     needs: setup
@@ -63,24 +64,25 @@ jobs:
         run: |
           curl -L -o tracebuild https://github.com/frigus02/tracebuild/releases/latest/download/tracebuild-linux-amd64
           chmod +x tracebuild
-          echo "STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
-          echo "STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "TRACEBUILD_BUILD_ID=${{needs.setup.outputs.buildid}}" >>$GITHUB_ENV
+          echo "TRACEBUILD_STEP_ID=$(./tracebuild id)" >>$GITHUB_ENV
+          echo "TRACEBUILD_STEP_START=$(./tracebuild now)" >>$GITHUB_ENV
           echo "STEP_TOOLCHAIN_START=$(./tracebuild now)" >>$GITHUB_ENV
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - name: "Tracebuild: Report Install toolchain"
-        run: ./tracebuild step --build ${{needs.setup.outputs.buildid}} --step $STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
+        run: ./tracebuild step --step $TRACEBUILD_STEP_ID --id $(./tracebuild id) --start-time $STEP_TOOLCHAIN_START --name "Install toolchain"
       - name: Run cargo fmt
-        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo fmt -- --check
+        run: ./tracebuild cmd -- cargo fmt -- --check
       - name: Run cargo clippy
-        run: ./tracebuild cmd --build ${{needs.setup.outputs.buildid}} --step $STEP_ID -- cargo clippy --all-features
+        run: ./tracebuild cmd -- cargo clippy --all-features
       - name: "Tracebuild: Report step"
         if: always()
         run: |
           STEP_STATUS=$([ "${{job.status}}" == "success" ] && echo success || echo failure)
-          ./tracebuild step --build ${{needs.setup.outputs.buildid}} --id $STEP_ID --start-time $STEP_START --name lint --status $STEP_STATUS
+          ./tracebuild step --name lint --status $STEP_STATUS
   report_build:
     runs-on: ubuntu-latest
     if: always()
