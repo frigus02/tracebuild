@@ -1,6 +1,6 @@
 [package]
 name = "tracebuild"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Jan Kühle <jkuehle90@gmail.com>"]
 edition = "2018"
 description = "Command line utility to instrument builds and send traces to OpenTelemetry supported tracing systems"
