@@ -26,13 +26,13 @@ STEP_START=$(tracebuild now)
 Wrap each command in:
 
 ```
-tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] [--name <name>] -- my-cmd --with params
+tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] [--name <name>] [--build-name <build_name>] -- my-cmd --with params
 ```
 
 After each step:
 
 ```
-tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID --start-time $STEP_START [--name $STEP_NAME] [--status <success|failure>]
+tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID --start-time $STEP_START [--name $STEP_NAME] [--build-name <build_name>] [--status <success|failure>]
 ```
 
 After the entire build:
@@ -77,11 +77,8 @@ Currently the only supported system is Prometheus. The challenge here is that tr
 
 Tracebuild exports the following metrics:
 
-- `tracebuild.cmd.count` (labels: `name`, `exit_code`)
-- `tracebuild.cmd.duration` (labels: `name`, `exit_code`)
-- `tracebuild.step.count` (labels: `name`, `status`)
-- `tracebuild.step.duration` (labels: `name`, `status`)
-- `tracebuild.build.count` (labels: `name`, `branch`, `status`)
+- `tracebuild.cmd.duration` (labels: `name`, `build_name`, `exit_code`)
+- `tracebuild.step.duration` (labels: `name`, `build_name`, `status`)
 - `tracebuild.build.duration` (labels: `name`, `branch`, `status`)
 
 The duration metrics are exported as histograms for Prometheus. Builds can vary in time quite a bit. In order to still provide a way to see how builds change over time, the histogram contains buckets of 5 min intervals from 5 to 45 mins.

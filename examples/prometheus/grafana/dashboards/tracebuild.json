@@ -15,7 +15,6 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "panels": [
     {
@@ -69,7 +68,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "increase(tracebuild_build_count[$__rate_interval])",
+          "expr": "increase(tracebuild_build_duration_count[$__rate_interval])",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -244,7 +243,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "increase(tracebuild_step_count[$__rate_interval])",
+          "expr": "increase(tracebuild_step_duration_count[$__rate_interval])",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -419,7 +418,7 @@
       "targets": [
         {
           "exemplar": false,
-          "expr": "increase(tracebuild_cmd_count[$__rate_interval])",
+          "expr": "increase(tracebuild_cmd_duration_count[$__rate_interval])",
           "instant": false,
           "interval": "",
           "legendFormat": "",

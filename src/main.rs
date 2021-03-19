@@ -33,13 +33,6 @@ fn record_event_duration(meter: &Meter, name: &str, start_time: Timestamp, label
     }
 }
 
-fn record_event_count(meter: &Meter, name: &str, labels: &[KeyValue]) {
-    match meter.u64_counter(name).try_init() {
-        Ok(value_recorder) => value_recorder.add(1, labels),
-        Err(err) => eprintln!("Failed to record count {}: {}", name, err),
-    }
-}
-
 #[derive(StructOpt)]
 enum Args {
     /// Generates an ID, which can be used as either a span or build id.
@@ -55,9 +48,12 @@ enum Args {
         /// Optional parent step ID
         #[structopt(long = "step")]
         step: Option<StepID>,
-        /// Optional name. Falls back to cmd + args for traces and cmd for metrics
+        /// Optional name. Falls back to cmd + args. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "name")]
         name: Option<String>,
+        /// Optional build name
+        #[structopt(long = "build-name")]
+        build_name: Option<String>,
         /// Command name
         #[structopt(name = "CMD")]
         cmd: String,
@@ -83,6 +79,9 @@ enum Args {
         /// Optional name
         #[structopt(long = "name")]
         name: Option<String>,
+        /// Optional build name
+        #[structopt(long = "build-name")]
+        build_name: Option<String>,
         /// Optional status
         #[structopt(long = "status")]
         status: Option<Status>,
@@ -127,19 +126,16 @@ async fn async_main() -> i32 {
             build,
             step,
             name,
+            build_name,
             cmd,
             args,
         } => {
             let pipeline = pipeline::install_pipeline();
 
-            let span_name = if let Some(name) = name.clone() {
-                format!("cmd - {}", name)
-            } else {
-                format!("cmd - {} {}", cmd, args.join(" "))
-            };
+            let name = name.unwrap_or_else(|| format!("{} {}", cmd, args.join(" ")));
             let span = pipeline
                 .tracer
-                .span_builder(&span_name)
+                .span_builder(&format!("cmd - {}", name))
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_kind(SpanKind::Client)
                 .with_attributes(vec![
@@ -153,7 +149,7 @@ async fn async_main() -> i32 {
                 .start(&pipeline.tracer);
             let cx = Context::current_with_span(span);
             let start_time = Timestamp::now();
-            let exit_code = match cmd::fork_with_sigterm(cmd.clone(), args)
+            let exit_code = match cmd::fork_with_sigterm(cmd, args)
                 .with_context(cx.clone())
                 .await
             {
@@ -172,9 +168,11 @@ async fn async_main() -> i32 {
             };
 
             let mut labels = Vec::new();
-            labels.push(Key::new("name").string(name.unwrap_or(cmd)));
+            labels.push(Key::new("name").string(name));
+            if let Some(build_name) = build_name {
+                labels.push(Key::new("build_name").string(build_name));
+            }
             labels.push(Key::new("exit_code").i64(exit_code.into()));
-            record_event_count(&pipeline.meter, "tracebuild.cmd.count", &labels);
             record_event_duration(
                 &pipeline.meter,
                 "tracebuild.cmd.duration",
@@ -189,6 +187,7 @@ async fn async_main() -> i32 {
             id,
             start_time,
             name,
+            build_name,
             status,
         } => {
             let pipeline = pipeline::install_pipeline();
@@ -214,10 +213,12 @@ async fn async_main() -> i32 {
             if let Some(name) = name {
                 labels.push(Key::new("name").string(name));
             }
+            if let Some(build_name) = build_name {
+                labels.push(Key::new("build_name").string(build_name));
+            }
             if let Some(status) = status {
                 labels.push(Key::new("status").string(status.to_string()));
             }
-            record_event_count(&pipeline.meter, "tracebuild.step.count", &labels);
             record_event_duration(
                 &pipeline.meter,
                 "tracebuild.step.duration",
@@ -269,7 +270,6 @@ async fn async_main() -> i32 {
             if let Some(status) = status {
                 labels.push(Key::new("status").string(status.to_string()));
             }
-            record_event_count(&pipeline.meter, "tracebuild.build.count", &labels);
             record_event_duration(
                 &pipeline.meter,
                 "tracebuild.build.duration",
