@@ -17,28 +17,28 @@ chmod +x tracebuild
 Generate IDs and start times:
 
 ```
-BUILD_ID=$(tracebuild id)
-STEP_ID=$(tracebuild id)
-BUILD_START=$(tracebuild now)
-STEP_START=$(tracebuild now)
+TRACEBUILD_BUILD_ID=$(tracebuild id)
+TRACEBUILD_BUILD_START=$(tracebuild now)
+TRACEBUILD_STEP_ID=$(tracebuild id)
+TRACEBUILD_STEP_START=$(tracebuild now)
 ```
 
 Wrap each command in:
 
 ```
-tracebuild cmd --build $BUILD_ID [--step $PARENT_SPAN_ID] [--name <name>] [--build-name <build_name>] -- my-cmd --with params
+tracebuild cmd --build $TRACEBUILD_BUILD_ID [--step $TRACEBUILD_STEP_ID] [--name <name>] [--build-name <build_name>] -- my-cmd --with params
 ```
 
 After each step:
 
 ```
-tracebuild step --build $BUILD_ID [--step $PARENT_SPAN_ID] --id $STEP_ID --start-time $STEP_START [--name $STEP_NAME] [--build-name <build_name>] [--status <success|failure>]
+tracebuild step --build $TRACEBUILD_BUILD_ID [--step $PARENT_SPAN_ID] --id $TRACEBUILD_STEP_ID --start-time $TRACEBUILD_STEP_START [--name <step_name>] [--build-name <build_name>] [--status <success|failure>]
 ```
 
 After the entire build:
 
 ```
-tracebuild build --id $BUILD_ID --start-time $BUILD_START [--name $BUILD_NAME] [--branch $BRANCH] [--commit --$COMMIT] [--status <success|failure>]
+tracebuild build --id $TRACEBUILD_BUILD_ID --start-time $TRACEBUILD_BUILD_START [--name $TRACEBUILD_BUILD_NAME] [--branch <branch>] [--commit <commit>] [--status <success|failure>]
 ```
 
 ## Configuration
