@@ -10,7 +10,7 @@ mod pipeline;
 mod status;
 mod timestamp;
 
-use id::{BuildID, StepID};
+use id::{BuildId, StepId};
 use opentelemetry::{
     metrics::Meter,
     trace::{FutureExt, Span, SpanKind, StatusCode, TraceContextExt, Tracer},
@@ -36,7 +36,7 @@ fn record_event_duration(meter: &Meter, name: &str, start_time: Timestamp, label
 #[derive(StructOpt)]
 enum Args {
     /// Generates an ID, which can be used as either a span or build id.
-    ID,
+    Id,
     /// Generates timestamp, which can be used as a build or span start time.
     Now,
     /// Executes the specified command and reports a span using the configured OpenTelemetry
@@ -44,10 +44,10 @@ enum Args {
     Cmd {
         /// Build ID
         #[structopt(long = "build", env = "TRACEBUILD_BUILD_ID")]
-        build: BuildID,
+        build: BuildId,
         /// Optional parent step ID
         #[structopt(long = "step", env = "TRACEBUILD_STEP_ID")]
-        step: Option<StepID>,
+        step: Option<StepId>,
         /// Optional name. Falls back to cmd + args. Included in metrics, so should be low cardinality if metrics are enabled.
         #[structopt(long = "name")]
         name: Option<String>,
@@ -66,13 +66,13 @@ enum Args {
     Step {
         /// Build ID
         #[structopt(long = "build", env = "TRACEBUILD_BUILD_ID")]
-        build: BuildID,
+        build: BuildId,
         /// Optional parent step ID
         #[structopt(long = "step")]
-        step: Option<StepID>,
+        step: Option<StepId>,
         /// Step ID
         #[structopt(long = "id", env = "TRACEBUILD_STEP_ID")]
-        id: StepID,
+        id: StepId,
         /// Start time
         #[structopt(long = "start-time", env = "TRACEBUILD_STEP_START")]
         start_time: Timestamp,
@@ -90,7 +90,7 @@ enum Args {
     Build {
         /// Build ID
         #[structopt(long = "id", env = "TRACEBUILD_BUILD_ID")]
-        id: BuildID,
+        id: BuildId,
         /// Start time
         #[structopt(long = "start-time", env = "TRACEBUILD_BUILD_START")]
         start_time: Timestamp,
@@ -109,11 +109,16 @@ enum Args {
     },
 }
 
-async fn async_main() -> i32 {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    pipeline::install_pipeline();
+    let tracer = pipeline::tracer();
+    let meter = pipeline::meter();
+
     let args = Args::from_args();
-    match args {
-        Args::ID => {
-            let id = BuildID::generate();
+    let exit_code = match args {
+        Args::Id => {
+            let id = BuildId::generate();
             println!("{}", id);
             0
         }
@@ -130,11 +135,8 @@ async fn async_main() -> i32 {
             cmd,
             args,
         } => {
-            let pipeline = pipeline::install_pipeline();
-
             let name = name.unwrap_or_else(|| format!("{} {}", cmd, args.join(" ")));
-            let span = pipeline
-                .tracer
+            let span = tracer
                 .span_builder(&format!("cmd - {}", name))
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_kind(SpanKind::Client)
@@ -146,7 +148,7 @@ async fn async_main() -> i32 {
                             .collect::<Vec<_>>(),
                     ),
                 ])
-                .start(&pipeline.tracer);
+                .start(&tracer);
             let cx = Context::current_with_span(span);
             let start_time = Timestamp::now();
             let exit_code = match cmd::fork_with_sigterm(cmd, args)
@@ -167,18 +169,12 @@ async fn async_main() -> i32 {
                 }
             };
 
-            let mut labels = Vec::new();
-            labels.push(Key::new("name").string(name));
+            let mut labels = vec![Key::new("name").string(name)];
             if let Some(build_name) = build_name {
                 labels.push(Key::new("build_name").string(build_name));
             }
             labels.push(Key::new("exit_code").i64(exit_code.into()));
-            record_event_duration(
-                &pipeline.meter,
-                "tracebuild.cmd.duration",
-                start_time,
-                &labels,
-            );
+            record_event_duration(&meter, "tracebuild.cmd.duration", start_time, &labels);
             exit_code
         }
         Args::Step {
@@ -190,21 +186,18 @@ async fn async_main() -> i32 {
             build_name,
             status,
         } => {
-            let pipeline = pipeline::install_pipeline();
-
             let span_name: Cow<'static, str> = if let Some(name) = name.clone() {
                 format!("step - {}", name).into()
             } else {
                 "step".into()
             };
-            let span = pipeline
-                .tracer
+            let span = tracer
                 .span_builder(&span_name)
                 .with_parent_context(context::get_parent_context(build, step))
                 .with_start_time(start_time.system_time())
                 .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
-                .start(&pipeline.tracer);
+                .start(&tracer);
             if let Some(status) = &status {
                 span.set_status(status.into(), "".into());
             }
@@ -219,12 +212,7 @@ async fn async_main() -> i32 {
             if let Some(status) = status {
                 labels.push(Key::new("status").string(status.to_string()));
             }
-            record_event_duration(
-                &pipeline.meter,
-                "tracebuild.step.duration",
-                start_time,
-                &labels,
-            );
+            record_event_duration(&meter, "tracebuild.step.duration", start_time, &labels);
             0
         }
         Args::Build {
@@ -235,21 +223,18 @@ async fn async_main() -> i32 {
             commit,
             status,
         } => {
-            let pipeline = pipeline::install_pipeline();
-
             let span_name: Cow<'static, str> = if let Some(name) = name.clone() {
                 format!("build - {}", name).into()
             } else {
                 "build".into()
             };
-            let span = pipeline
-                .tracer
+            let span = tracer
                 .span_builder(&span_name)
                 .with_start_time(start_time.system_time())
                 .with_trace_id(id.trace_id())
                 .with_span_id(id.span_id())
                 .with_kind(SpanKind::Internal)
-                .start(&pipeline.tracer);
+                .start(&tracer);
             if let Some(branch) = branch.clone() {
                 span.set_attribute(Key::new("tracebuild.build.branch").string(branch));
             }
@@ -270,22 +255,11 @@ async fn async_main() -> i32 {
             if let Some(status) = status {
                 labels.push(Key::new("status").string(status.to_string()));
             }
-            record_event_duration(
-                &pipeline.meter,
-                "tracebuild.build.duration",
-                start_time,
-                &labels,
-            );
+            record_event_duration(&meter, "tracebuild.build.duration", start_time, &labels);
             0
         }
-    }
-}
+    };
 
-fn main() {
-    let exit_code = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async_main());
+    pipeline::shutdown_pipeline();
     std::process::exit(exit_code);
 }

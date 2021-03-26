@@ -10,8 +10,7 @@ pub(crate) struct PrometheusPushOnDropExporter {
 
 impl Drop for PrometheusPushOnDropExporter {
     fn drop(&mut self) {
-        let mut metric_families = self.exporter.registry().gather();
-        sanitize_label_names(&mut metric_families);
+        let metric_families = self.exporter.registry().gather();
         if let Err(err) = push_metrics(metric_families, &self.endpoint) {
             opentelemetry::global::handle_error(err);
         }
@@ -41,36 +40,6 @@ pub(crate) fn new_prometheus_push_on_drop_exporter(
         ])
         .try_init()?;
     Ok(PrometheusPushOnDropExporter { exporter, endpoint })
-}
-
-// Sanitize labels
-// Remove once https://github.com/open-telemetry/opentelemetry-rust/pull/462 is in
-fn sanitize_label_names(metric_families: &mut Vec<MetricFamily>) {
-    fn sanitize_prometheus_key<T: AsRef<str>>(raw: T) -> String {
-        let mut escaped = raw
-            .as_ref()
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .peekable();
-
-        let prefix = if escaped.peek().map_or(false, |c| c.is_ascii_digit()) {
-            "key_"
-        } else if escaped.peek().map_or(false, |&c| c == '_') {
-            "key"
-        } else {
-            ""
-        };
-
-        prefix.chars().chain(escaped).take(100).collect()
-    }
-
-    for mf in metric_families.iter_mut() {
-        for m in mf.mut_metric().iter_mut() {
-            for l in m.mut_label().iter_mut() {
-                l.set_name(sanitize_prometheus_key(l.get_name()));
-            }
-        }
-    }
 }
 
 fn push_metrics(metric_families: Vec<MetricFamily>, endpoint: &str) -> Result<(), MetricsError> {
