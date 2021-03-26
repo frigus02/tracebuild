@@ -5,36 +5,26 @@ use opentelemetry::{
     metrics::{Meter, MetricsError},
     trace::TraceError,
 };
-use std::time::Duration;
+use std::sync::Mutex;
 use thiserror::Error;
 
-pub(crate) struct Pipeline {
-    pub(crate) tracer: BoxedTracer,
-    pub(crate) meter: Meter,
-    _traces_uninstall: TracesUninstall,
-    _metrics_uninstall: MetricsUninstall,
+pub(crate) fn tracer() -> BoxedTracer {
+    opentelemetry::global::tracer("tracebuild")
 }
 
-impl Pipeline {
-    fn new(traces_uninstall: TracesUninstall, metrics_uninstall: MetricsUninstall) -> Self {
-        Self {
-            tracer: opentelemetry::global::tracer("tracebuild"),
-            meter: opentelemetry::global::meter("tracebuild"),
-            _traces_uninstall: traces_uninstall,
-            _metrics_uninstall: metrics_uninstall,
-        }
-    }
+pub(crate) fn meter() -> Meter {
+    opentelemetry::global::meter("tracebuild")
 }
 
-enum TracesUninstall {
-    Otlp(opentelemetry_otlp::Uninstall),
-    Jaeger(opentelemetry_jaeger::Uninstall),
-    None,
+lazy_static::lazy_static! {
+    static ref GLOBAL_PROMETHEUS_EXPORTER: Mutex<Option<prometheus::PrometheusPushOnDropExporter>> = Mutex::new(None);
 }
 
-enum MetricsUninstall {
-    Prometheus(prometheus::PrometheusPushOnDropExporter),
-    None,
+fn set_global_prometheus_exporter(exporter: Option<prometheus::PrometheusPushOnDropExporter>) {
+    let mut global_exporter = GLOBAL_PROMETHEUS_EXPORTER
+        .lock()
+        .expect("GLOBAL_PROMETHEUS_EXPORTER Mutex poisoned");
+    *global_exporter = exporter;
 }
 
 #[derive(Debug, Error)]
@@ -47,7 +37,7 @@ enum PipelineError {
     Other(String),
 }
 
-pub(crate) fn install_pipeline() -> Pipeline {
+pub(crate) fn install_pipeline() {
     if let Err(err) = opentelemetry::global::set_error_handler(|err| {
         eprintln!("OpenTelemetry Error: {}", err);
     }) {
@@ -61,19 +51,27 @@ pub(crate) fn install_pipeline() -> Pipeline {
                 "Failed to install chosen OpenTelemetry trace exporter pipeline: {}",
                 err
             );
-            install_fallback_pipeline()
         }
-    }
+    };
 }
 
-fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
-    let traces_uninstall = match std::env::var("OTEL_TRACES_EXPORTER")
+pub(crate) fn shutdown_pipeline() {
+    opentelemetry::global::shutdown_tracer_provider();
+
+    set_global_prometheus_exporter(None);
+    opentelemetry::global::set_meter_provider(
+        opentelemetry::metrics::noop::NoopMeterProvider::default(),
+    );
+}
+
+fn try_install_chosen_pipeline() -> Result<(), PipelineError> {
+    match std::env::var("OTEL_TRACES_EXPORTER")
         .unwrap_or_else(|_| "otlp".into())
         .as_ref()
     {
         "otlp" => try_install_otlp_traces_pipeline()?,
         "jaeger" => try_install_jaeger_traces_pipeline()?,
-        "none" => install_noop_traces_pipeline(),
+        "none" => {}
         exporter => {
             return Err(PipelineError::Other(format!(
                 "Unsupported traces exporter {}. Supported are: otlp, jaeger, stdout",
@@ -82,12 +80,12 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         }
     };
 
-    let metrics_uninstall = match std::env::var("OTEL_METRICS_EXPORTER")
+    match std::env::var("OTEL_METRICS_EXPORTER")
         .unwrap_or_else(|_| "none".into())
         .as_ref()
     {
         "prometheus" => try_install_prometheus_metrics_pipeline()?,
-        "none" => install_noop_metrics_pipeline(),
+        "none" => {}
         exporter => {
             return Err(PipelineError::Other(format!(
                 "Unsupported metrics exporter {}. Supported are: otlp, prometheus, stdout",
@@ -96,41 +94,25 @@ fn try_install_chosen_pipeline() -> Result<Pipeline, PipelineError> {
         }
     };
 
-    Ok(Pipeline::new(traces_uninstall, metrics_uninstall))
+    Ok(())
 }
 
-fn try_install_otlp_traces_pipeline() -> Result<TracesUninstall, PipelineError> {
-    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-        .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
-        .unwrap_or_else(|_| "https://localhost:4317".into());
-    let (_, uninstall) = opentelemetry_otlp::new_pipeline()
-        .with_endpoint(endpoint)
-        .with_timeout(Duration::from_secs(5))
-        .install()?;
-    Ok(TracesUninstall::Otlp(uninstall))
+fn try_install_otlp_traces_pipeline() -> Result<(), PipelineError> {
+    let _tracer = opentelemetry_otlp::new_pipeline()
+        .with_env()
+        .with_tonic()
+        .install_batch(opentelemetry::runtime::Tokio)?;
+    Ok(())
 }
 
-fn try_install_jaeger_traces_pipeline() -> Result<TracesUninstall, PipelineError> {
-    let (_, uninstall) = opentelemetry_jaeger::new_pipeline().from_env().install()?;
-    Ok(TracesUninstall::Jaeger(uninstall))
+fn try_install_jaeger_traces_pipeline() -> Result<(), PipelineError> {
+    let _tracer =
+        opentelemetry_jaeger::new_pipeline().install_batch(opentelemetry::runtime::Tokio)?;
+    Ok(())
 }
 
-fn try_install_prometheus_metrics_pipeline() -> Result<MetricsUninstall, PipelineError> {
+fn try_install_prometheus_metrics_pipeline() -> Result<(), PipelineError> {
     let exporter = prometheus::new_prometheus_push_on_drop_exporter()?;
-    Ok(MetricsUninstall::Prometheus(exporter))
-}
-
-fn install_noop_traces_pipeline() -> TracesUninstall {
-    TracesUninstall::None
-}
-
-fn install_noop_metrics_pipeline() -> MetricsUninstall {
-    MetricsUninstall::None
-}
-
-fn install_fallback_pipeline() -> Pipeline {
-    let traces_uninstall = install_noop_traces_pipeline();
-    let metrics_uninstall = install_noop_metrics_pipeline();
-
-    Pipeline::new(traces_uninstall, metrics_uninstall)
+    set_global_prometheus_exporter(Some(exporter));
+    Ok(())
 }
