@@ -5,7 +5,7 @@ use opentelemetry::{
     metrics::{Meter, MetricsError},
     trace::TraceError,
 };
-use std::{sync::Mutex, time::Duration};
+use std::sync::Mutex;
 use thiserror::Error;
 
 pub(crate) fn tracer() -> BoxedTracer {
@@ -98,20 +98,16 @@ fn try_install_chosen_pipeline() -> Result<(), PipelineError> {
 }
 
 fn try_install_otlp_traces_pipeline() -> Result<(), PipelineError> {
-    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-        .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
-        .unwrap_or_else(|_| "https://localhost:4317".into());
     let _tracer = opentelemetry_otlp::new_pipeline()
-        .with_endpoint(endpoint)
-        .with_timeout(Duration::from_secs(5))
+        .with_env()
         .with_tonic()
-        .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
+        .install_batch(opentelemetry::runtime::Tokio)?;
     Ok(())
 }
 
 fn try_install_jaeger_traces_pipeline() -> Result<(), PipelineError> {
-    let _tracer = opentelemetry_jaeger::new_pipeline()
-        .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
+    let _tracer =
+        opentelemetry_jaeger::new_pipeline().install_batch(opentelemetry::runtime::Tokio)?;
     Ok(())
 }
 

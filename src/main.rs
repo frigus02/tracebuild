@@ -109,7 +109,7 @@ enum Args {
     },
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     pipeline::install_pipeline();
     let tracer = pipeline::tracer();
