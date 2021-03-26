@@ -50,7 +50,9 @@ Configure the exporter using environment variables.
 | OTEL_TRACES_EXPORTER               | OpenTelemetry traces exporter to use. Supported are: otlp, jaeger, none                                                       | otlp                   |
 | OTEL_METRICS_EXPORTER              | OpenTelemetry metrics exporter to use. Supported are: prometheus, none                                                        | none                   |
 | OTEL_EXPORTER_OTLP_ENDPOINT        | OpenTelemetry Collector endpoint                                                                                              | https://localhost:4317 |
-| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT | OpenTelemetry Collector endpoint for traces (takes priority over the generic variable)                                        | https://localhost:4317 |
+| OTEL_EXPORTER_OTLP_TRACES_ENDPOINT | OpenTelemetry Collector endpoint for traces (takes priority over the generic variable)                                        |                        |
+| OTEL_EXPORTER_OTLP_TIMEOUT         | Timeout in seconds for OTLP exporter                                                                                          | 10                     |
+| OTEL_EXPORTER_OTLP_TRACES_TIMEOUT  | Timeout in seconds for OTLP exporter (takes priority over the generic variable)                                               |                        |
 | OTEL_EXPORTER_JAEGER_AGENT_HOST    | Jaeger agent host                                                                                                             | 127.0.0.1              |
 | OTEL_EXPORTER_JAEGER_AGENT_PORT    | Jaeger agent port                                                                                                             | 6831                   |
 | OTEL_EXPORTER_JAEGER_ENDPOINT      | Jaeger collector endpoint. If specified, this is used instead of the Jaeger agent. Example: http://localhost:14268/api/traces |                        |
